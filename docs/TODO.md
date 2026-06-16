@@ -20,14 +20,14 @@
 > Phase 1（MVP）已于 2026-06-16 落地：Web 场景现在能跑 **AI 推理执行**。Phase 2/3 待办。
 
 ### Phase 1 — MVP：AI 模式 Web 自动化 ✅
-- [x] 引入 Playwright（`Microsoft.Playwright` 1.44），新增 `Web/BrowserDriver.cs`（异步语义化操作 API：navigate/scan/click/click_text/fill/select/get_text/wait/assert_text/screenshot）。
+- [x] 引入 Playwright（`Microsoft.Playwright` 1.60），新增 `Web/BrowserDriver.cs`（异步语义化操作 API：navigate/scan/click/click_text/fill/select/get_text/wait/assert_text/screenshot）。
 - [x] `Ai/BrowserToolSchemas.cs`：`browser_*` 工具定义，名称与前端「浏览器测试写法」一致。
 - [x] `Ai/WebAiAgent.cs`：异步 LLM 工具循环；`DeepSeekClient` 工具清单参数化（默认仍为 WPF 工具，向后兼容）。
 - [x] `RunService.ExecuteAsync` 按 `scenario.Type=="web"` 分发到 `WebAiAgent`+`BrowserDriver`；web 起始 URL 复用 `WindowTitle` 字段（零数据库改动）。
 - [x] AI 截图验证零改动复用（`BrowserDriver` 整页截图 → 现有 `VisionVerifier`）。
 - [x] 静态 demo 靶子 `samples/web-demo/`（下单表单页，含成功/失败视觉）+ seed 一个 web 示例场景。
-- [ ] **首次需安装浏览器内核**：`pwsh src/TestPlatform.API/bin/Debug/net9.0-windows/playwright.ps1 install chromium`（联网下载约 150MB；离线环境需预置）。
-- [ ] 消除 `NU1903`：Playwright 1.44 传递依赖 `System.Text.Json 6.0.0` 有漏洞告警，显式引用新版或升级 Playwright 即可。
+- [x] **浏览器内核**：升级到 Playwright 1.60 后，其期望的 chromium 内核（revision 1223）与本机已装版本一致，直接用 Playwright 自带内核；`BrowserLauncher` 的 Edge/Chrome 回退保留为兜底。新环境如缺内核：`pwsh src/TestPlatform.API/bin/Debug/net9.0-windows/playwright.ps1 install chromium`。
+- [x] **消除 `NU1903`**：升级 Playwright 1.44 → 1.60，不再传递有漏洞的 `System.Text.Json 6.0.0`，构建已无安全告警。
 
 ### Phase 2 — 浏览器录制回放 ✅
 - [x] `Recording/BrowserRecorder.cs`：Playwright 注入脚本采集点击/输入/下拉 → 生成选择器化结构化步骤（web 版 `RecordedStep`，复用 SignalR `recording` 组）。

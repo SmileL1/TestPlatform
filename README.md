@@ -36,7 +36,7 @@
 
 - Windows UIAutomation + WPF/WinForms Runtime（桌面控件驱动，强依赖 Windows）
 - Win32 低级鼠标/键盘钩子（`WH_MOUSE_LL` / `WH_KEYBOARD_LL`，桌面操作录制）
-- Microsoft Playwright（Web 浏览器自动化与录制；内核缺失时自动回退系统 Edge/Chrome，无需额外下载）
+- Microsoft Playwright 1.60（Web 浏览器自动化与录制；优先用自带 Chromium 内核，缺失时自动回退系统 Edge/Chrome 兜底）
 - SqlSugar ORM + PostgreSQL（CodeFirst 自动建表）
 - ASP.NET Core SignalR（实时推送）
 - DeepSeek（文本推理，Tool Calling）+ 任意 OpenAI 兼容多模态模型（截图验证）
@@ -50,7 +50,7 @@
 
 > ✅ **WPF 桌面与 Web 网页双端均已支持**：桌面走 Windows UIAutomation，网页走 Playwright；
 > 两端都支持 **AI 推理执行** 与 **录制回放**，并共用 **AI 截图验证**。
-> Web 浏览器优先用 Playwright 内核，缺失时自动回退系统 Edge/Chrome（无需额外下载）。
+> Web 浏览器优先用 Playwright 自带内核，缺失时自动回退系统 Edge/Chrome 兜底（无需额外下载）。
 > 仓库内置静态靶子 [`samples/web-demo/`](samples/web-demo/) 可直接体验 Web 自动化。后续规划见 [docs/TODO.md](docs/TODO.md)。
 
 ---

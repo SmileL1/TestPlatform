@@ -89,7 +89,7 @@ flowchart TB
 |----|------|------|
 | 后端框架 | ASP.NET Core 9（`net9.0-windows`，启用 `UseWPF`/`UseWindowsForms`） | 既能跑 Web API，又能引用 Windows Desktop 运行时（UIAutomation 在其中） |
 | 桌面驱动 | System.Windows.Automation（UIAutomation） | 微软原生、对 WPF 控件树支持好；配合 `AutomationId` 稳定定位 |
-| 网页驱动 | Microsoft Playwright | 跨浏览器、API 现代；内核缺失时回退系统 Edge/Chrome（`BrowserLauncher`），免额外下载 |
+| 网页驱动 | Microsoft Playwright 1.60 | 跨浏览器、API 现代；优先用自带 Chromium 内核，缺失时回退系统 Edge/Chrome 兜底（`BrowserLauncher`），免额外下载 |
 | 桌面录制 | Win32 低级钩子 + UIA 属性事件 | 钩子捕获点击/功能键，UIA 事件捕获文本输入/选项，三路合流还原真实操作 |
 | 网页录制 | Playwright 注入脚本（`AddInitScript` + `ExposeBinding`） | 监听 DOM 的 click/change，生成选择器化步骤；元素名取关联 label/placeholder，不靠 UIAutomation |
 | ORM | SqlSugar + PostgreSQL | 轻量、CodeFirst 自动建表、`IsAutoCloseConnection` 适合短连接 |
