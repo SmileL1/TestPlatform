@@ -33,8 +33,9 @@
 - [x] `Recording/BrowserRecorder.cs`：Playwright 注入脚本采集点击/输入/下拉 → 生成选择器化结构化步骤（web 版 `RecordedStep`，复用 SignalR `recording` 组）。
 - [x] `Execution/BrowserStepPlayer.cs`：按录制步骤回放（失败重试一次、选择器点不到回退按文字点击、可选 AI 截图验证）；`RunService.ExecuteWebAsync` 按「有步骤+非 ai 模式」走结构化回放。
 - [x] `RecordingController.Start` 扩展 `type` 参数（web 时 `WindowTitle` 存起始 URL）；前端 `ScenarioEdit` 放开 web 录制卡片并按类型区分文案；`Web/BrowserLauncher` 共享「内核→Edge→Chrome」回退启动。
+- [x] `RecordingView` 独立录制页支持 web（顶部 WPF/Web 切换 + 起始 URL 输入，start/save 传 `type`）。
+- [x] 录制元素命名修正：表单控件名取关联 label/placeholder（不取已输入值）；`<select>` 的多余 click 不再记录（避免选择被挤掉）。
 - [ ] 抽 `IDriver` 接口统一 WPF/Web（当前 WPF 同步、Web 异步，平行实现）。
-- [ ] `RecordingView` 独立录制页支持 web（当前仅 `ScenarioEdit` 内录制支持 web）。
 
 ### Phase 3 — 完整化
 - [ ] CDP 连接已开浏览器（`--remote-debugging-port=9222`，前端已有提示），替代每次新启浏览器。
@@ -59,7 +60,7 @@
 
 ## 🟡 健壮性与质量
 
-- [ ] **单次执行的全局串行保护**：目前无显式互斥，若并发触发两次执行会争抢前台焦点/钩子。建议加运行锁或队列。
+- [x] **单次执行的全局串行保护**：`RunService` 加全局执行信号量（`SemaphoreSlim(1,1)`），同一时刻只允许一个测试真正执行、其余排队（监控页提示「排队等待」）；执行前自动停止 WPF 与 Web 录制；`IsBusy` 暴露后录制接口在执行期间拒绝开始录制。
 - [ ] **回放兜底坐标的有效性**：坐标兜底依赖分辨率/窗口位置不变，跨机器回放易失效，需提示或禁用坐标兜底选项。
 - [ ] **异常分类与可读化**：`RunService` 的异常 summary 直接透传 `ex.Message`，建议归类（连接/窗口未找到/LLM 失败等）。
 - [ ] **AI 验证地址兼容性测试**：`VisionVerifier.BuildEndpoint` 已适配多厂商，补充对常见厂商（通义/智谱/OpenAI/Azure）的回归用例。

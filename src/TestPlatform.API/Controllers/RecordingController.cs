@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
+using TestPlatform.API.Execution;
 using TestPlatform.API.Recording;
 using TestPlatform.Core.DB;
 using TestPlatform.Core.Entities;
@@ -12,18 +13,24 @@ public class RecordingController : ControllerBase
 {
     private readonly IRecorder _recorder;
     private readonly IBrowserRecorder _browserRecorder;
+    private readonly IRunService _runService;
     private readonly AppDbContext _db;
 
-    public RecordingController(IRecorder recorder, IBrowserRecorder browserRecorder, AppDbContext db)
+    public RecordingController(IRecorder recorder, IBrowserRecorder browserRecorder,
+        IRunService runService, AppDbContext db)
     {
         _recorder = recorder;
         _browserRecorder = browserRecorder;
+        _runService = runService;
         _db = db;
     }
 
     [HttpPost("start")]
     public async Task<IActionResult> Start([FromBody] StartRecordingRequest req)
     {
+        // 录制与执行争抢全局钩子/浏览器，执行期间禁止开始录制
+        if (_runService.IsBusy)
+            return BadRequest(new { error = "当前有测试正在执行，请等其完成后再开始录制" });
         try
         {
             if (req.Type == "web")

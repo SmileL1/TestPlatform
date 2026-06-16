@@ -17,6 +17,8 @@ public interface IRunService
     Task<Guid> StartRunAsync(Guid scenarioId, Dictionary<string, string> inputParams, string mode = "auto");
     Task CancelRunAsync(Guid runId);
     bool IsRunning(Guid runId);
+    /// <summary>是否有执行正在进行或排队（录制接口据此在执行期间拒绝开始录制）</summary>
+    bool IsBusy { get; }
 }
 
 /// <summary>
@@ -28,15 +30,20 @@ public class RunService : IRunService
     private readonly IHubContext<TestHub> _hub;
     private readonly ISettingsService _settings;
     private readonly IRecorder _recorder;
+    private readonly IBrowserRecorder _browserRecorder;
     private readonly Dictionary<Guid, CancellationTokenSource> _running = new();
     private readonly object _lock = new();
+    // 全局执行闸：同一时刻只允许一个测试真正执行，其余排队，避免争抢浏览器/前台焦点/全局钩子
+    private readonly SemaphoreSlim _executionGate = new(1, 1);
 
-    public RunService(AppDbContext db, IHubContext<TestHub> hub, ISettingsService settings, IRecorder recorder)
+    public RunService(AppDbContext db, IHubContext<TestHub> hub, ISettingsService settings,
+        IRecorder recorder, IBrowserRecorder browserRecorder)
     {
-        _db       = db;
-        _hub      = hub;
-        _settings = settings;
-        _recorder = recorder;
+        _db              = db;
+        _hub             = hub;
+        _settings        = settings;
+        _recorder        = recorder;
+        _browserRecorder = browserRecorder;
     }
 
     public async Task<Guid> StartRunAsync(Guid scenarioId, Dictionary<string, string> inputParams, string mode = "auto")
@@ -54,12 +61,14 @@ public class RunService : IRunService
         };
         await db.Insertable(run).ExecuteCommandAsync();
 
-        // 录制与回放共用全局钩子和鼠标，运行前必须停止录制
+        // 录制与执行共用全局钩子/浏览器，运行前必须停止任何录制
         if (_recorder.IsRecording)
         {
             _recorder.Stop();
             await Task.Delay(300);
         }
+        if (_browserRecorder.IsRecording)
+            await _browserRecorder.StopAsync();
 
         var cts = new CancellationTokenSource();
         lock (_lock) _running[run.Id] = cts;
@@ -86,6 +95,11 @@ public class RunService : IRunService
         lock (_lock) return _running.ContainsKey(runId);
     }
 
+    public bool IsBusy
+    {
+        get { lock (_lock) return _running.Count > 0; }
+    }
+
     // ── 执行 ─────────────────────────────────────────────────────
 
     private async Task ExecuteAsync(Guid runId, Scenario scenario,
@@ -94,9 +108,16 @@ public class RunService : IRunService
         var db = _db.CreateClient();
         // AI 配置：本表（设置页）优先，回退 appsettings.json
         var cfg = await _settings.GetResolvedAsync();
+        bool gateAcquired = false;
         try
         {
-            // Web 场景：浏览器自动化，仅 AI 推理执行（暂无结构化回放）
+            // 全局串行：前方有任务在跑则排队等待，避免并发争抢浏览器/前台焦点/钩子
+            if (_executionGate.CurrentCount == 0)
+                await PushLog(runId, 0, "system", "", "⏳ 已有任务在执行，排队等待…", true);
+            await _executionGate.WaitAsync(ct);
+            gateAcquired = true;
+
+            // Web 场景：浏览器自动化（结构化回放 / AI 推理执行，见 ExecuteWebAsync）
             if (scenario.Type == "web")
             {
                 await ExecuteWebAsync(runId, scenario, inputParams, mode, cfg, ct);
@@ -226,6 +247,7 @@ public class RunService : IRunService
         }
         finally
         {
+            if (gateAcquired) _executionGate.Release();
             lock (_lock) _running.Remove(runId);
         }
     }
