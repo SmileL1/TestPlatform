@@ -27,6 +27,9 @@ src/TestPlatform.API/logs/
 huashu-design/
 tupian/
 
+# ── 项目指令文件（不上传）─────────────────────────────
+CLAUDE.md
+
 # ── 杂项 ─────────────────────────────────────────────
 *.log
 .DS_Store
