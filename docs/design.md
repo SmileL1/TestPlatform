@@ -81,23 +81,30 @@ src/
     ├── Controllers/                     # 见 2.3
     ├── Hubs/TestHub.cs                  # SignalR Hub
     ├── Ai/
-    │   ├── AiAgent.cs                   # LLM 工具调用主循环
-    │   ├── DeepSeekClient.cs            # DeepSeek 会话封装
-    │   ├── ToolSchemas.cs               # 工具定义（function calling）
-    │   └── VisionVerifier.cs            # 截图验证（多模态）
+    │   ├── AiAgent.cs                   # WPF 的 LLM 工具调用主循环
+    │   ├── WebAiAgent.cs                # Web 的 LLM 工具调用主循环（异步）
+    │   ├── DeepSeekClient.cs            # DeepSeek 会话封装（工具集可注入 WPF/Web）
+    │   ├── ToolSchemas.cs               # WPF 工具定义（function calling）
+    │   ├── BrowserToolSchemas.cs        # Web 工具定义（browser_*）
+    │   └── VisionVerifier.cs            # 截图验证（多模态，两端共用）
     ├── Execution/
-    │   ├── RunService.cs                # 执行调度（IRunService）
-    │   ├── StepPlayer.cs                # 结构化回放 + 断言求值
+    │   ├── RunService.cs                # 执行调度（IRunService，按 Type 分发 wpf/web）
+    │   ├── StepPlayer.cs                # WPF 结构化回放 + 断言求值
+    │   ├── BrowserStepPlayer.cs         # Web 结构化回放
     │   └── Assertion.cs                 # 验证条件模型
     ├── Recording/
-    │   ├── Recorder.cs                  # 三路事件合流录制（IRecorder）
+    │   ├── Recorder.cs                  # WPF 三路事件合流录制（IRecorder）
+    │   ├── BrowserRecorder.cs           # Web 注入脚本录制（IBrowserRecorder）
     │   ├── HookHost.cs                  # 低级鼠标/键盘钩子宿主
-    │   └── RecordedStep.cs              # 录制步骤
+    │   └── RecordedStep.cs              # 录制步骤（WPF/Web 共用）
     ├── Wpf/
-    │   ├── WpfDriver.cs                 # 语义化操作 API
+    │   ├── WpfDriver.cs                 # 桌面语义化操作 API
     │   ├── ElementFinder.cs             # 窗口/控件定位
     │   ├── Input.cs / Screenshot.cs     # 键盘模拟 / 截图
     │   └── ElementInfo.cs / OpResult.cs # 控件信息 / 操作结果
+    ├── Web/
+    │   ├── BrowserDriver.cs             # 网页语义化操作 API（Playwright，异步）
+    │   └── BrowserLauncher.cs           # 浏览器启动：内核→Edge→Chrome 回退
     ├── Settings/
     │   ├── SettingsService.cs           # 配置存取（白名单+回退）
     │   └── SecretProtector.cs           # 密钥加解密
@@ -106,9 +113,9 @@ src/
         └── LogCleanupService.cs         # 过期日志清理（HostedService）
 ```
 
-启动顺序（`Program.cs`）：`EnsureDatabaseCreated`（连 `postgres` 主库检测并建目标库）→ `MigrateDatabase`（补列/改类型/放宽 nullable）→ `InitDatabase`（CodeFirst 建表）→ 注册 `AppDbContext`/`SettingsService`/`RunService`/`Recorder`/`LogCleanupService` → 映射 Controllers 与 `/hubs/test`。
+启动顺序（`Program.cs`）：`EnsureDatabaseCreated`（连 `postgres` 主库检测并建目标库）→ `MigrateDatabase`（补列/改类型/放宽 nullable）→ `InitDatabase`（CodeFirst 建表）→ 注册 `AppDbContext`/`SettingsService`/`RunService`/`Recorder`/`BrowserRecorder`/`LogCleanupService` → 映射 Controllers 与 `/hubs/test`。
 
-> 服务生命周期：`AppDbContext`、`ISettingsService`、`IRunService`、`IRecorder` 均为**单例**；
+> 服务生命周期：`AppDbContext`、`ISettingsService`、`IRunService`、`IRecorder`、`IBrowserRecorder` 均为**单例**；
 > 数据库访问每次经 `AppDbContext.CreateClient()` 取新 `SqlSugarClient`（`IsAutoCloseConnection=true`），不跨请求复用。
 
 ### 2.2 数据库设计
@@ -120,7 +127,7 @@ src/
 |----|------|------|
 | id | uuid PK | 场景 ID |
 | suite_id | uuid NULL | 所属套件（可空） |
-| type | varchar(20) | `wpf`（默认）/ `web`（保留未实现） |
+| type | varchar(20) | `wpf`（默认，UIAutomation）/ `web`（Playwright 浏览器） |
 | name | varchar | 场景名称 |
 | window_title | varchar | 目标窗口标题，用于 UIAutomation 定位被测 WPF 窗口 |
 | description | text | AI 目标 / 自然语言步骤，支持 `{{参数}}` |
@@ -217,13 +224,15 @@ test_plan_run_items(id, plan_run_id, scenario_id, test_run_id NULL, sort_order, 
 #### 录制 `/api/recording`
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/recording/start` | 开始录制，body：`{windowTitle}` |
-| POST | `/recording/stop` | 停止，返回 `{steps,count}` |
+| POST | `/recording/start` | 开始录制，body：`{windowTitle, type}`；`type=web` 时 `windowTitle` 存起始 URL，启动浏览器录制 |
+| POST | `/recording/stop` | 停止（按当前录制类型分发），返回 `{steps,count}` |
 | GET | `/recording/steps` | 当前步骤 + `isRecording` |
 | DELETE | `/recording/steps/{index}` | 删除某步 |
 | POST | `/recording/clear` | 清空 |
-| POST | `/recording/save` | 另存为新场景（可带前端编辑后的 steps） |
+| POST | `/recording/save` | 另存为新场景（body 可带 `type` 与前端编辑后的 steps） |
 | POST | `/recording/save-to/{scenarioId}` | 覆盖已有场景的录制内容（保留名称/断言等） |
+
+> 录制按 `type` 分发到 `Recorder`（wpf）或 `BrowserRecorder`（web），两者共用同一 SignalR `recording` 组与 `RecordedStep` 结构。
 
 #### 套件 `/api/suites`
 CRUD + `GET /suites/{id}/scenarios`；删除套件时把其下场景 `suite_id` 置空。
@@ -291,6 +300,22 @@ CRUD + `GET /suites/{id}/scenarios`；删除套件时把其下场景 `suite_id` 
 
 `DeepSeekClient` 维护对话历史，按需压缩旧的 `scan_ui` 结果以省 token；`TotalTokensUsed` 计入 `TestRun.TokenUsed`。系统提示中内置被测应用的已知 AutomationId 与操作规则，减少 `scan_ui` 调用。
 
+**Web 版（`WebAiAgent`，对应 `BrowserDriver`）**：结构与 `AiAgent` 对称但全异步。入口 `RunAsync(testName, startUrl, goal, …)` 先 `BrowserDriver.StartAsync(startUrl)`（启动浏览器并导航），再进入同样的 tool-calling 循环。工具集为 `BrowserToolSchemas`：
+
+| 工具 | 说明 |
+|------|------|
+| `browser_navigate` | 跳转 URL |
+| `browser_scan` | 扫描页面可交互元素（selector + 文字） |
+| `browser_click` / `browser_click_text` | 按 CSS 选择器 / 按可见文字点击 |
+| `browser_fill` | 输入框填写 |
+| `browser_select` | 下拉选择（按 value 或可见文本） |
+| `browser_get_text` | 读取元素文本 |
+| `browser_wait` | 等待毫秒 |
+| `assert_text` | 断言元素文本包含 |
+| `done` | 报告结果 |
+
+`DeepSeekClient` 的工具集通过构造参数注入（默认 `ToolSchemas.All`，Web 路径传 `BrowserToolSchemas.All`），其余会话逻辑两端复用。
+
 ### 2.6 结构化回放引擎
 
 `StepPlayer.RunAsync(windowTitle, steps, assertions?, vision?, goal, aiPrompt?, ct)`：
@@ -308,6 +333,13 @@ CRUD + `GET /suites/{id}/scenarios`；删除套件时把其下场景 `suite_id` 
 - **综合判定**：有断言或 AI 验证 → 启用项都通过才算通过；都没有 → 看是否「零步骤失败」。
   返回 `PlayResult`（步数/失败数/断言通过数/AI 结果/失败原因），由 `RunService.BuildSummary` 生成可读 summary。
 
+**Web 版（`BrowserStepPlayer`）**：`RunAsync(startUrl, steps, vision?, goal, aiPrompt?, ct)`，先 `BrowserDriver.StartAsync` 再逐步重放。
+
+- 步骤 `action` 与 WPF 同名：`click` / `set_text`（→ Fill）/ `select_item`（→ Select）/ `press_key` / `wait`；`Target` 为 CSS 选择器。
+- **参数替换**：`Target/Value` 中 `{{参数}}` 用运行时值替换。
+- **失败重试一次**；`click` 选择器点不到时**回退按可见文字点击**（`TargetName`）。
+- 可选 **AI 截图验证**（整页截图 → `VisionVerifier`）。综合判定：开了 AI 验证则二者都通过，否则看步骤是否零失败。
+
 ### 2.7 AI 截图验证
 
 `VisionVerifier.VerifyAsync(goal, extraPrompt?, imageBase64, ct)`：
@@ -319,7 +351,7 @@ CRUD + `GET /suites/{id}/scenarios`；删除套件时把其下场景 `suite_id` 
 
 ### 2.8 录制服务
 
-`Recorder` 用三路事件源合成一条步骤流：
+**WPF 录制（`Recorder`）** 用三路事件源合成一条步骤流：
 
 1. **鼠标钩子**（`WH_MOUSE_LL`）：**按下时刻**后台解析命中元素（点击常立即弹窗/跳转，必须用按下快照），抬起点与按下点接近则确认为一次点击。表格单元格优先识别为 `click_cell`（保留 gridId/真实行号/列关键字），按钮内文字/图标提升到带 id 的可交互祖先。
 2. **键盘钩子**（`WH_KEYBOARD_LL`）：仅当被测进程在前台时记录白名单键（Enter/Tab/Escape/F1~F12，被测系统按钮多绑功能键）。
@@ -331,6 +363,14 @@ CRUD + `GET /suites/{id}/scenarios`；删除套件时把其下场景 `suite_id` 
 **与执行互斥**：见 `RunService` 启动前 `Stop()` + 等待。
 
 保存时（`save`/`save-to`）做轻量 `Dedup`（合并相邻同目标输入、丢弃点击行后冗余 select_item），并据 `set_text` 步骤生成参数建议、用步骤描述拼出场景自然语言描述。
+
+**Web 录制（`BrowserRecorder`）**：用 Playwright 打开浏览器，往页面注入监听脚本采集操作。
+
+- 注入用 `Page.AddInitScriptAsync`（每次文档加载重新挂监听，导航后仍生效）+ `ExposeBindingAsync("__recordStep")`（JS → .NET 回传）。注入脚本须用 **IIFE 立即执行**（`AddInitScript` 直接执行脚本文本，非函数）。
+- 监听 DOM 的 `click` 与 `change`：点击 → `click`；文本输入 → `set_text`；下拉 → `select_item`（`<select>`/文本框的 `click` 被跳过，避免多余步骤）。
+- **选择器**：优先 `#id` → `[name=…]` → 简单 `nth-of-type` 路径。
+- **元素名**：取关联 `<label>` / 包裹 label / `placeholder` / `aria-label` / `name`（**绝不取已输入的值**），保证「密码」不会显示成输入内容。
+- 与 WPF 录制**共用** `RecordedStep` 结构、SignalR `recording` 组、防抖（同元素连续输入只留最后值）。
 
 ### 2.9 设置与配置
 
@@ -378,6 +418,8 @@ conn.on('RunFinished', d => status.value = d.status)
 
 ## 4. 核心流程
 
+> `RunService.ExecuteAsync` 先按 `scenario.Type` 分流：`web` → `ExecuteWebAsync`（见 4.4），其余走下述 WPF 路径。
+
 ### 4.1 AI 模式执行
 `POST /tasks/run(mode=ai)` → `RunService` 建 `TestRun(running)` → `Task.Run(ExecuteAsync)` → 取生效 AI 配置 → `AiAgent.RunAsync`：`Attach` → `StartAsync(goal)` → 多轮 tool calling（每步 `PushLog` 落库 + SignalR）→ `done` → 可选 AI 截图验证 → 综合判定 → 更新 `TestRun` + 推 `RunFinished`。
 
@@ -387,6 +429,12 @@ conn.on('RunFinished', d => status.value = d.status)
 
 ### 4.3 计划批量执行
 `POST /plans/{id}/run` 建 `TestPlanRun` + N 个 `TestPlanRunItem` → 后台顺序：标 item `running` → `RunService.StartRunAsync` 拿 `runId` 立即回写 → 轮询 `TestRun` 终态（最多 ~20 分钟，支持取消）→ 更新 item 与计划统计 → 全部完成标 `completed`。前端轮询 `/plans/runs/{runId}/items` 展示进度。
+
+### 4.4 Web 场景执行（`ExecuteWebAsync`）
+起始 URL 取自 `Scenario.WindowTitle`。按「有录制步骤 + 非 ai 模式」决定走结构化回放还是 AI：
+- **结构化**：`BrowserStepPlayer.RunAsync(startUrl, steps, …)` → `BrowserDriver.StartAsync`（启动浏览器/回退 Edge）→ 逐步重放（重试、选择器回退文字点击）→ 可选 AI 截图验证 → `PlayResult` → 落库 + `RunFinished`。
+- **AI**：`WebAiAgent.RunAsync(startUrl, goal, …)` → 多轮 `browser_*` 工具调用 → `done` → 可选 AI 截图验证 → 落库 + `RunFinished`。
+- **录制**：`/recording/start{type:web}` → `BrowserRecorder` 注入脚本采集 → 实时推 `RecordedStep` → 保存为 web 场景（步骤 action 与 WPF 同名，前端 UI 复用）。
 
 ---
 

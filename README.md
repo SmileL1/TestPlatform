@@ -1,7 +1,7 @@
-# TestPlatform — AI 驱动的 WPF 自动化测试平台
+# TestPlatform — AI 驱动的 WPF 桌面 & Web 网页自动化测试平台
 
-> 面向 **WPF 桌面应用** 的智能自动化测试平台。
-> 同时提供 **AI 推理执行** 与 **录制回放** 两套引擎，结合 **AI 截图验证** 做结果判定，
+> 面向 **WPF 桌面应用与 Web 网页** 的智能自动化测试平台。
+> 桌面走 Windows UIAutomation、网页走 Playwright，两端共用同一套 **AI 推理执行**、**录制回放**、**AI 截图验证**，
 > 通过 SignalR 实时推送每一步执行过程。
 
 ![实时执行监控](docs/images/05-task-monitor.png)
@@ -18,8 +18,9 @@
 
 | 功能 | 说明 |
 |------|------|
-| **AI 推理执行** | 接入 DeepSeek，通过 Tool Calling 让 LLM 逐步操作 WPF 控件，自动完成未录制的探索性场景 |
-| **录制回放** | 鼠标钩子 + 键盘钩子 + UIAutomation 属性事件三路合流录制操作，一键回放，无需写代码 |
+| **WPF + Web 双端** | 同一平台覆盖 Windows 桌面（UIAutomation）与网页（Playwright），下列能力两端通用 |
+| **AI 推理执行** | 接入 DeepSeek，通过 Tool Calling 让 LLM 逐步操作 WPF 控件或网页元素，自动完成未录制的探索性场景 |
+| **录制回放** | 桌面（鼠标/键盘/UIAutomation 三路合流）或网页（注入脚本采集点击/输入/选择）录制操作，一键回放，无需写代码 |
 | **结构化验证** | 回放结束按 `equals/contains/exists/textVisible/noDialog…` 等条件判定，而非仅看步骤是否报错 |
 | **AI 截图验证** | 执行完对结果界面截图，交多模态模型独立判断「是否真的成功」，可与结构化验证叠加 |
 | **测试计划** | 把多个场景编成计划，顺序批量执行并统计通过/失败 |
@@ -34,11 +35,12 @@
 **后端** — ASP.NET Core 9 Web API，目标框架 `net9.0-windows`
 
 - Windows UIAutomation + WPF/WinForms Runtime（桌面控件驱动，强依赖 Windows）
-- Win32 低级鼠标/键盘钩子（`WH_MOUSE_LL` / `WH_KEYBOARD_LL`，操作录制）
+- Win32 低级鼠标/键盘钩子（`WH_MOUSE_LL` / `WH_KEYBOARD_LL`，桌面操作录制）
+- Microsoft Playwright（Web 浏览器自动化与录制；内核缺失时自动回退系统 Edge/Chrome，无需额外下载）
 - SqlSugar ORM + PostgreSQL（CodeFirst 自动建表）
 - ASP.NET Core SignalR（实时推送）
 - DeepSeek（文本推理，Tool Calling）+ 任意 OpenAI 兼容多模态模型（截图验证）
-- System.Drawing.Common（截图）
+- System.Drawing.Common（桌面截图）
 
 **前端** — Vue 3 + TypeScript + Vite
 
@@ -46,8 +48,10 @@
 - `@microsoft/signalr` 实时客户端 · Axios
 - 设计风格：瑞士排版编辑风（暖纸浅底 + 衬线/等宽混排，无渐变）
 
-> ⚠️ **当前仅实现 WPF/桌面自动化**。`Scenario.Type` 保留了 `web` 取值，但代码中尚无浏览器驱动，
-> Web 模式属规划项，详见 [docs/TODO.md](docs/TODO.md)。
+> ✅ **WPF 桌面与 Web 网页双端均已支持**：桌面走 Windows UIAutomation，网页走 Playwright；
+> 两端都支持 **AI 推理执行** 与 **录制回放**，并共用 **AI 截图验证**。
+> Web 浏览器优先用 Playwright 内核，缺失时自动回退系统 Edge/Chrome（无需额外下载）。
+> 仓库内置静态靶子 [`samples/web-demo/`](samples/web-demo/) 可直接体验 Web 自动化。后续规划见 [docs/TODO.md](docs/TODO.md)。
 
 ---
 
@@ -115,6 +119,17 @@ POST http://localhost:5000/api/scenarios/seed
 
 会导入若干内置示例场景，便于快速体验录制回放与 AI 执行（示例数据可按需删除或替换为自己的被测应用场景）。
 
+### 5. 体验 Web 自动化（可选）
+
+1. 起一个静态服务托管内置靶子页：
+   ```powershell
+   npx serve -l 3000 samples/web-demo      # 或 python -m http.server 3000 --directory samples/web-demo
+   ```
+2. 新建场景时选 **🌐 Web 网页**，起始 URL 填 `http://localhost:3000`。
+3. 在「操作录制」页选 Web、录一遍下单流程并保存 → 结构化回放；或直接写自然语言目标走 AI 推理执行。
+
+详见 [`samples/web-demo/README.md`](samples/web-demo/README.md)。
+
 ---
 
 ## 界面预览
@@ -158,12 +173,14 @@ TestPlatform/
 │       ├── Program.cs              # 启动：建库 + 迁移 + 服务注册 + SignalR
 │       ├── Controllers/            # Scenario/Task/TestPlan/Recording/Suite/Settings/System
 │       ├── Hubs/TestHub.cs         # SignalR：按 run_{id} / recording 分组
-│       ├── Ai/                     # AiAgent · DeepSeekClient · ToolSchemas · VisionVerifier
-│       ├── Execution/              # RunService（调度）· StepPlayer（回放）· Assertion
-│       ├── Recording/              # Recorder · HookHost · RecordedStep
+│       ├── Ai/                     # AiAgent · WebAiAgent · DeepSeekClient · ToolSchemas · BrowserToolSchemas · VisionVerifier
+│       ├── Execution/              # RunService（调度）· StepPlayer（WPF回放）· BrowserStepPlayer（Web回放）· Assertion
+│       ├── Recording/              # Recorder（WPF）· BrowserRecorder（Web注入采集）· HookHost · RecordedStep
 │       ├── Wpf/                    # WpfDriver · ElementFinder · Input · Screenshot
+│       ├── Web/                    # BrowserDriver · BrowserLauncher（Playwright，内核→Edge→Chrome 回退）
 │       ├── Settings/               # SettingsService · SecretProtector（密钥加解密）
 │       └── Logging/                # AiLog · LogCleanupService
+├── samples/web-demo/               # Web 自动化静态靶子（下单表单页，零构建）
 └── web/testplatform-web/           # Vue 3 前端
     └── src/views/                  # Plan* / Scenario* / TaskMonitor / Recording / History / Settings
 ```

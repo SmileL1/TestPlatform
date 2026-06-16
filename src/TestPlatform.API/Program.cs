@@ -26,6 +26,7 @@ builder.Services.AddSingleton(dbCtx);
 builder.Services.AddSingleton<ISettingsService, SettingsService>();
 builder.Services.AddSingleton<IRunService, RunService>();
 builder.Services.AddSingleton<IRecorder, Recorder>();
+builder.Services.AddSingleton<IBrowserRecorder, BrowserRecorder>();
 builder.Services.AddHostedService<LogCleanupService>();
 
 var app = builder.Build();

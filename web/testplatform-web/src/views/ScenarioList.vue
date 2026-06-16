@@ -14,9 +14,17 @@
           <el-option label="🖥 WPF 桌面" value="wpf" />
           <el-option label="🌐 Web 网页" value="web" />
         </el-select>
-        <el-button type="primary" @click="$router.push('/scenarios/new')">
-          <el-icon><Plus /></el-icon> 新建场景
-        </el-button>
+        <el-dropdown @command="onCreate">
+          <el-button type="primary">
+            <el-icon><Plus /></el-icon> 新建场景 <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="wpf">🖥 WPF 桌面场景</el-dropdown-item>
+              <el-dropdown-item command="web">🌐 Web 网页场景</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
     </div>
 
@@ -155,6 +163,12 @@ import { Plus, Search, ArrowDown } from '@element-plus/icons-vue'
 import { scenarioApi, taskApi } from '../api'
 
 const router = useRouter()
+
+// 新建场景：按类型带上 ?type=web，ScenarioEdit 据此进入 Web 模式
+function onCreate(type: string) {
+  router.push(type === 'web' ? '/scenarios/new?type=web' : '/scenarios/new')
+}
+
 const scenarios = ref<any[]>([])
 const loading = ref(false)
 const searchText = ref('')

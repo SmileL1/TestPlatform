@@ -27,7 +27,7 @@ export const scenarioApi = {
 }
 
 export const recordingApi = {
-  start:  (windowTitle: string) => api.post('/recording/start', { windowTitle }),
+  start:  (windowTitle: string, type: string = 'wpf') => api.post('/recording/start', { windowTitle, type }),
   stop:   ()                    => api.post('/recording/stop'),
   clear:  ()                    => api.post('/recording/clear'),
   saveTo: (scenarioId: string, steps: any[]) =>

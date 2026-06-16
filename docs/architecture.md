@@ -1,6 +1,6 @@
 # TestPlatform 架构设计文档
 
-> 版本：v2.0 ｜ 更新日期：2026-06-16 ｜ 适用代码：当前主干（纯 WPF 自动化）
+> 版本：v2.1 ｜ 更新日期：2026-06-16 ｜ 适用代码：当前主干（WPF 桌面 + Web 网页自动化）
 
 本文描述 TestPlatform 的整体架构、技术选型理由、模块职责与关键数据流。
 更细的接口/字段级设计见 [详细设计文档](design.md)，需求层面见 [需求设计文档](requirements.md)。
@@ -9,12 +9,17 @@
 
 ## 1. 系统定位
 
-TestPlatform 是一套**针对 Windows 桌面（WPF）应用的自动化测试平台**。它解决两个核心痛点：
+TestPlatform 是一套**针对 Windows 桌面（WPF）应用与 Web 网页的自动化测试平台**。它解决两个核心痛点：
 
-1. **不会写代码的测试人员也能造测试** —— 通过「录制操作 → 回放」生成结构化用例。
+1. **不会写代码的测试人员也能造测试** —— 通过「录制操作 → 回放」生成结构化用例（桌面与网页皆可）。
 2. **界面/数据多变导致脚本脆弱** —— 通过「LLM 逐步推理操作」+「AI 截图验证结果」提升鲁棒性。
 
-平台本身是 B/S 架构（浏览器操作 + 后端执行），但**执行引擎必须运行在被测桌面所在的 Windows 机器上**。
+被测对象分两类，由场景的 `Type` 字段区分：
+
+- **`wpf`** —— Windows 桌面应用，经 UIAutomation 驱动。执行引擎必须与被测应用同机运行于 Windows。
+- **`web`** —— 网页应用，经 Playwright 驱动浏览器（内核缺失时回退系统 Edge/Chrome）。
+
+平台本身是 B/S 架构（浏览器操作 + 后端执行）；因桌面路径强依赖 Windows UIAutomation，**后端整体仍运行在 Windows 上**。
 
 ---
 
@@ -84,7 +89,9 @@ flowchart TB
 |----|------|------|
 | 后端框架 | ASP.NET Core 9（`net9.0-windows`，启用 `UseWPF`/`UseWindowsForms`） | 既能跑 Web API，又能引用 Windows Desktop 运行时（UIAutomation 在其中） |
 | 桌面驱动 | System.Windows.Automation（UIAutomation） | 微软原生、对 WPF 控件树支持好；配合 `AutomationId` 稳定定位 |
-| 录制 | Win32 低级钩子 + UIA 属性事件 | 钩子捕获点击/功能键，UIA 事件捕获文本输入/选项，三路合流还原真实操作 |
+| 网页驱动 | Microsoft Playwright | 跨浏览器、API 现代；内核缺失时回退系统 Edge/Chrome（`BrowserLauncher`），免额外下载 |
+| 桌面录制 | Win32 低级钩子 + UIA 属性事件 | 钩子捕获点击/功能键，UIA 事件捕获文本输入/选项，三路合流还原真实操作 |
+| 网页录制 | Playwright 注入脚本（`AddInitScript` + `ExposeBinding`） | 监听 DOM 的 click/change，生成选择器化步骤；元素名取关联 label/placeholder，不靠 UIAutomation |
 | ORM | SqlSugar + PostgreSQL | 轻量、CodeFirst 自动建表、`IsAutoCloseConnection` 适合短连接 |
 | 实时推送 | ASP.NET Core SignalR | WebSocket 优先、分组（`run_{id}`/`recording`）天然契合「订阅一次执行」 |
 | 操作 LLM | DeepSeek（`deepseek-chat`） | 成本低、Tool Calling 兼容 OpenAI 协议；只做文本推理不需识图 |
@@ -101,19 +108,24 @@ flowchart TB
 |------|----------|------|
 | **Controllers** | `ScenarioController` `TaskController` `TestPlanController` `RecordingController` `SuiteController` `SettingsController` `SystemController` | REST 入口，参数校验、调度执行、查询落库数据 |
 | **Hubs** | `TestHub` | SignalR 分组管理：`JoinRun/LeaveRun`、`JoinRecording/LeaveRecording` |
-| **Execution** | `RunService` | **执行调度核心**：选模式（auto/structured/ai）、建 `TestRun`、落 `RunLog`、推 SignalR、汇总判定 |
-| | `StepPlayer` | 结构化回放：逐步重放、失败重试、弹窗自动处理、断言求值、可选 AI 截图验证 |
+| **Execution** | `RunService` | **执行调度核心**：按 `Type`（wpf/web）+ 模式（auto/structured/ai）分发、建 `TestRun`、落 `RunLog`、推 SignalR、汇总判定 |
+| | `StepPlayer` | WPF 结构化回放：逐步重放、失败重试、弹窗自动处理、断言求值、可选 AI 截图验证 |
+| | `BrowserStepPlayer` | Web 结构化回放：按录制步骤在浏览器重放，失败重试、选择器点不到回退按文字点击、可选 AI 截图验证 |
 | | `Assertion` | 结构化验证条件模型（`equals/contains/exists/textVisible/noDialog…`） |
-| **Ai** | `AiAgent` | LLM 工具调用循环：`scan_ui→click→…→done`，每步回调推送 |
-| | `DeepSeekClient` | DeepSeek 会话封装（对话历史、tool_call 解析、token 统计） |
-| | `ToolSchemas` | 暴露给 LLM 的工具定义（点击/输入/选项/表格/弹窗/断言…） |
-| | `VisionVerifier` | 截图 + 目标交多模态模型，解析首行「结论：通过/不通过」 |
-| **Recording** | `Recorder` | 三路事件合流录制，防抖与噪声过滤，SignalR 实时推步骤 |
+| **Ai** | `AiAgent` | WPF 的 LLM 工具调用循环：`scan_ui→click→…→done`，每步回调推送 |
+| | `WebAiAgent` | Web 的 LLM 工具调用循环（异步）：`browser_scan→browser_fill→…→done` |
+| | `DeepSeekClient` | DeepSeek 会话封装（对话历史、tool_call 解析、token 统计；工具集可注入 WPF/Web 两套） |
+| | `ToolSchemas` / `BrowserToolSchemas` | 暴露给 LLM 的工具定义（桌面：点击/输入/表格/弹窗…；网页：`browser_*`） |
+| | `VisionVerifier` | 截图 + 目标交多模态模型，解析首行「结论：通过/不通过」（两端共用） |
+| **Recording** | `Recorder` | WPF 三路事件合流录制，防抖与噪声过滤，SignalR 实时推步骤 |
+| | `BrowserRecorder` | Web 录制：Playwright 注入脚本采集 click/change，生成选择器化步骤，复用同一 SignalR 通道 |
 | | `HookHost` | 低级鼠标/键盘钩子宿主（`GCHandle` 固定委托防 GC 崩溃） |
-| | `RecordedStep` | 录制步骤数据结构（action/target/value/gridId/x,y…） |
-| **Wpf** | `WpfDriver` | 面向语义的操作 API：`Click/SetText/SelectItem/ClickCell/GetRowCount/TryGetDialog…` |
+| | `RecordedStep` | 录制步骤数据结构（action/target/value/gridId/x,y…；WPF 与 Web 共用） |
+| **Wpf** | `WpfDriver` | 桌面语义操作 API：`Click/SetText/SelectItem/ClickCell/GetRowCount/TryGetDialog…` |
 | | `ElementFinder` | 窗口/控件定位、坐标命中下钻、按钮内文字提升到可交互祖先 |
 | | `Screenshot` `Input` | 区域截图（base64 PNG）、键盘模拟 |
+| **Web** | `BrowserDriver` | 网页语义操作 API（异步）：`Navigate/Scan/Click/ClickText/Fill/Select/GetText/PressKey/AssertText/Screenshot` |
+| | `BrowserLauncher` | 浏览器启动器：Playwright 内核 → 系统 Edge → 系统 Chrome 三段回退（录制/执行共用） |
 | **Settings** | `SettingsService` | 两套 AI 配置存取，白名单键，敏感项加密、回退 `appsettings.json` |
 | | `SecretProtector` | API Key 加解密 |
 | **Logging** | `AiLog` `LogCleanupService` | AI 请求/响应落文件、按保留天数定期清理 |
@@ -198,6 +210,22 @@ sequenceDiagram
 每个场景调 `RunService.StartRunAsync` 拿到 `TestRunId` **立即回写**（前端即可拉该场景日志），
 再轮询 `TestRun.Status` 到终态，更新 item 与计划统计；支持整批取消（`CancellationTokenSource`）。
 
+### 5.4 Web 路径（与 WPF 对称）
+
+`RunService.StartRunAsync` 按 `scenario.Type` 分发：`web` 场景走 `ExecuteWebAsync`，其余走 WPF 路径。
+Web 路径与上面 5.1/5.2 **结构完全对称**，仅替换三处：
+
+| 关注点 | WPF | Web |
+|--------|-----|-----|
+| 驱动 | `WpfDriver`（UIAutomation，同步） | `BrowserDriver`（Playwright，异步） |
+| AI 工具循环 | `AiAgent` + `ToolSchemas` | `WebAiAgent` + `BrowserToolSchemas`（`browser_*`） |
+| 结构化回放 | `StepPlayer` | `BrowserStepPlayer` |
+| 录制 | `Recorder`（钩子+UIA） | `BrowserRecorder`（注入脚本） |
+| 截图验证 | `VisionVerifier`（窗口截图） | `VisionVerifier`（页面截图） |
+
+录制复用同一条 SignalR `recording` 通道与 `RecordedStep` 结构（action 名通用：`click/set_text/select_item/press_key`），
+因此前端录制 UI 与回放判定逻辑两端共享。Web 起始 URL 复用 `Scenario.WindowTitle` 字段存储（零数据库改动）。
+
 ---
 
 ## 6. 数据模型
@@ -260,9 +288,9 @@ erDiagram
 
 ## 8. 已知架构性约束
 
-1. 后端与被测应用必须同机、同桌面会话（Windows），无法容器化/无头运行。
+1. WPF 桌面路径要求后端与被测应用同机、同桌面会话（Windows），无法容器化/无头运行。
 2. 仅支持单机串行执行（同一时刻一套全局钩子/前台焦点），不适合并行多用例。
-3. Web/浏览器自动化尚未实现（`Type=web` 为占位）。
+3. Web 自动化已支持 AI 推理执行与录制回放；尚未做 CDP 连接已开浏览器、headless、iframe/多标签、并行（见 [TODO](TODO.md) Phase 3）。
 4. 前后端统一监听 `http://localhost:5000`（前端 baseURL 与 SignalR Hub 同源）。
 
 > 后续规划与缺口清单见 [docs/TODO.md](TODO.md)。

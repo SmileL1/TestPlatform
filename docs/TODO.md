@@ -15,10 +15,37 @@
 
 ---
 
+## 🌐 Web 网页端自动化测试（分阶段计划）
+
+> Phase 1（MVP）已于 2026-06-16 落地：Web 场景现在能跑 **AI 推理执行**。Phase 2/3 待办。
+
+### Phase 1 — MVP：AI 模式 Web 自动化 ✅
+- [x] 引入 Playwright（`Microsoft.Playwright` 1.44），新增 `Web/BrowserDriver.cs`（异步语义化操作 API：navigate/scan/click/click_text/fill/select/get_text/wait/assert_text/screenshot）。
+- [x] `Ai/BrowserToolSchemas.cs`：`browser_*` 工具定义，名称与前端「浏览器测试写法」一致。
+- [x] `Ai/WebAiAgent.cs`：异步 LLM 工具循环；`DeepSeekClient` 工具清单参数化（默认仍为 WPF 工具，向后兼容）。
+- [x] `RunService.ExecuteAsync` 按 `scenario.Type=="web"` 分发到 `WebAiAgent`+`BrowserDriver`；web 起始 URL 复用 `WindowTitle` 字段（零数据库改动）。
+- [x] AI 截图验证零改动复用（`BrowserDriver` 整页截图 → 现有 `VisionVerifier`）。
+- [x] 静态 demo 靶子 `samples/web-demo/`（下单表单页，含成功/失败视觉）+ seed 一个 web 示例场景。
+- [ ] **首次需安装浏览器内核**：`pwsh src/TestPlatform.API/bin/Debug/net9.0-windows/playwright.ps1 install chromium`（联网下载约 150MB；离线环境需预置）。
+- [ ] 消除 `NU1903`：Playwright 1.44 传递依赖 `System.Text.Json 6.0.0` 有漏洞告警，显式引用新版或升级 Playwright 即可。
+
+### Phase 2 — 浏览器录制回放 ✅
+- [x] `Recording/BrowserRecorder.cs`：Playwright 注入脚本采集点击/输入/下拉 → 生成选择器化结构化步骤（web 版 `RecordedStep`，复用 SignalR `recording` 组）。
+- [x] `Execution/BrowserStepPlayer.cs`：按录制步骤回放（失败重试一次、选择器点不到回退按文字点击、可选 AI 截图验证）；`RunService.ExecuteWebAsync` 按「有步骤+非 ai 模式」走结构化回放。
+- [x] `RecordingController.Start` 扩展 `type` 参数（web 时 `WindowTitle` 存起始 URL）；前端 `ScenarioEdit` 放开 web 录制卡片并按类型区分文案；`Web/BrowserLauncher` 共享「内核→Edge→Chrome」回退启动。
+- [ ] 抽 `IDriver` 接口统一 WPF/Web（当前 WPF 同步、Web 异步，平行实现）。
+- [ ] `RecordingView` 独立录制页支持 web（当前仅 `ScenarioEdit` 内录制支持 web）。
+
+### Phase 3 — 完整化
+- [ ] CDP 连接已开浏览器（`--remote-debugging-port=9222`，前端已有提示），替代每次新启浏览器。
+- [ ] headless 选项、iframe/多标签页、并行执行、浏览器启动参数管理。
+- [ ] WPF / Web 混合测试计划串联。
+
+---
+
 ## 🟡 功能与体验改进
 
-- [ ] **场景 `Type=web` 落地或下线**
-  当前 `web` 仅为占位、无浏览器驱动。要么补齐浏览器自动化（见远期），要么在 UI/文档中暂时隐藏该选项避免误导。
+- [x] ~~场景 `Type=web` 落地或下线~~ → 已落地：Web 场景支持 AI 推理执行（见上「Web 网页端自动化测试」Phase 1）。
 - [ ] **套件（Suite）前端管理 UI**
   `/api/suites` 与建表已就绪、`Scenario.SuiteId` 可归类，但前端无套件路由/页面，能力尚未对用户开放。
 - [ ] **断言编辑器**：在 `ScenarioEdit` 提供结构化断言（Op/ElementId/Expected/Label）的可视化编辑，降低手写 JSON 成本。
@@ -51,7 +78,7 @@
 
 ## 🟢 远期规划
 
-- [ ] **Web/浏览器自动化引擎**：引入 Playwright，使 `Type=web` 真正可用，并支持 WPF/Web 混合场景。
+- [~] **Web/浏览器自动化引擎**：Playwright AI 模式已落地（Phase 1）；录制回放、CDP 连接、混合场景见上「Web 网页端自动化测试」Phase 2/3。
 - [ ] **并行/分布式执行**：多机/多会话并行跑用例，平台侧做编排与结果汇聚。
 - [ ] **用例版本管理与对比**：录制步骤/断言的版本化，失败时对比上次成功快照。
 - [ ] **自愈式定位**：元素定位失败时由 LLM 结合 `scan_ui` 自动修复并回写步骤。
@@ -71,3 +98,4 @@
 - [x] 在线「设置」页 + API Key 加密存储 + 配置回退。
 - [x] 录制三路合流（鼠标/键盘/UIA 事件）+ 噪声过滤 + 前端可编辑步骤。
 - [x] 文档体系：README / 架构设计 / 需求设计 / 详细设计 / 本 TODO。
+- [x] **Web 自动化 MVP（AI 模式）**：Playwright `BrowserDriver` + `BrowserToolSchemas` + `WebAiAgent`，`RunService` 按 type 分发，截图验证复用，静态 demo 靶子 `samples/web-demo/`。

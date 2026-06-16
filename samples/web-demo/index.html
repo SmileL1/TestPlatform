@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Demo 商城 · 下单（TestPlatform Web 自动化靶子）</title>
+  <style>
+    :root { --ink:#1a1a1a; --line:#e4e2da; --bg:#faf9f5; --accent:#2b2b2b; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--ink);
+      font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+      display: flex; justify-content: center; padding: 48px 16px;
+    }
+    .card {
+      width: 100%; max-width: 460px; background: #fff;
+      border: 1px solid var(--line); border-radius: 4px; padding: 32px 30px;
+      box-shadow: 0 1px 0 rgba(0,0,0,.02);
+    }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    .sub { color: #8a8a8a; font-size: 13px; margin: 0 0 24px; }
+    label { display: block; font-size: 13px; font-weight: 600; margin: 16px 0 6px; }
+    input[type=text], input[type=password], input[type=number], select {
+      width: 100%; padding: 9px 11px; font-size: 14px;
+      border: 1px solid var(--line); border-radius: 3px; background: #fff;
+    }
+    .row-check { display: flex; align-items: center; gap: 8px; margin-top: 18px; font-size: 13px; }
+    .actions { margin-top: 24px; display: flex; gap: 10px; }
+    button {
+      font-size: 14px; padding: 10px 18px; border-radius: 3px; cursor: pointer; border: 1px solid var(--accent);
+    }
+    #submit { background: var(--accent); color: #fff; }
+    #reset  { background: #fff; color: var(--ink); }
+    .banner { margin-top: 22px; padding: 12px 14px; border-radius: 3px; font-size: 14px; display: none; }
+    #result { background: #e8f6ec; border: 1px solid #34a853; color: #1e7e34; }
+    #error  { background: #fdecea; border: 1px solid #e23c34; color: #c0271f; }
+    .hint { color: #b3b0a6; font-size: 12px; margin-top: 22px; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Demo 商城 · 下单</h1>
+    <p class="sub">TestPlatform Web 自动化测试靶子页（纯静态，无后端）</p>
+
+    <form id="orderForm" onsubmit="return false;">
+      <label for="username">用户名</label>
+      <input type="text" id="username" name="username" placeholder="请输入用户名" />
+
+      <label for="password">密码</label>
+      <input type="password" id="password" name="password" placeholder="请输入密码" />
+
+      <label for="product">商品</label>
+      <select id="product" name="product">
+        <option value="苹果">苹果（库存 10）</option>
+        <option value="香蕉">香蕉（库存 5）</option>
+        <option value="橙子">橙子（库存 0，缺货）</option>
+      </select>
+
+      <label for="qty">数量</label>
+      <input type="number" id="qty" name="qty" min="1" value="1" />
+
+      <div class="row-check">
+        <input type="checkbox" id="agree" name="agree" />
+        <label for="agree" style="margin:0; font-weight:400;">我已阅读并同意《购买条款》</label>
+      </div>
+
+      <div class="actions">
+        <button id="submit" type="button" onclick="submitOrder()">提交订单</button>
+        <button id="reset" type="button" onclick="resetForm()">重置</button>
+      </div>
+    </form>
+
+    <div id="result" class="banner"></div>
+    <div id="error" class="banner"></div>
+
+    <p class="hint">
+      可被测的成败路径：未填用户名/密码、未勾选条款、数量为 0、或选「橙子（缺货）」→ 报错；
+      其余正常下单 → 成功并显示订单号。
+    </p>
+  </div>
+
+  <script>
+    // 各商品库存（橙子缺货，用于制造失败用例）
+    const STOCK = { "苹果": 10, "香蕉": 5, "橙子": 0 };
+
+    function hideBanners() {
+      document.getElementById('result').style.display = 'none';
+      document.getElementById('error').style.display = 'none';
+    }
+
+    function fail(msg) {
+      hideBanners();
+      const e = document.getElementById('error');
+      e.textContent = '✗ 下单失败：' + msg;
+      e.style.display = 'block';
+    }
+
+    function submitOrder() {
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value.trim();
+      const product  = document.getElementById('product').value;
+      const qty      = parseInt(document.getElementById('qty').value, 10) || 0;
+      const agree    = document.getElementById('agree').checked;
+
+      if (!username)        return fail('请输入用户名');
+      if (!password)        return fail('请输入密码');
+      if (!agree)           return fail('请先同意《购买条款》');
+      if (qty < 1)          return fail('数量至少为 1');
+      if (qty > STOCK[product]) return fail(`「${product}」库存不足（剩余 ${STOCK[product]}）`);
+
+      hideBanners();
+      const orderNo = 'SO-' + Math.floor(100000 + Math.random() * 900000);
+      const r = document.getElementById('result');
+      r.textContent = `✓ 下单成功！订单号 ${orderNo}，商品「${product}」×${qty}`;
+      r.style.display = 'block';
+    }
+
+    function resetForm() {
+      document.getElementById('orderForm').reset();
+      hideBanners();
+    }
+  </script>
+</body>
+</html>

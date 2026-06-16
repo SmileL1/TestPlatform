@@ -6,12 +6,24 @@
       <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
         <div style="font-size:17px; font-weight:650; letter-spacing:.3px;">🎙 操作录制</div>
 
-        <el-select v-model="windowTitle" filterable allow-create default-first-option clearable
-                   placeholder="目标窗口标题" style="width:240px;" :disabled="recording">
-          <el-option v-for="w in windows" :key="w.pid + '_' + w.title"
-                     :label="w.title + (w.processName ? '  ·  ' + w.processName : '')" :value="w.title" />
-        </el-select>
-        <el-button :loading="winLoading" :disabled="recording" @click="loadWindows">刷新窗口</el-button>
+        <el-radio-group v-model="sceneType" :disabled="recording" @change="onTypeChange">
+          <el-radio-button label="wpf">🖥 WPF 桌面</el-radio-button>
+          <el-radio-button label="web">🌐 Web 网页</el-radio-button>
+        </el-radio-group>
+
+        <!-- WPF：选目标窗口 -->
+        <template v-if="sceneType === 'wpf'">
+          <el-select v-model="windowTitle" filterable allow-create default-first-option clearable
+                     placeholder="目标窗口标题" style="width:240px;" :disabled="recording">
+            <el-option v-for="w in windows" :key="w.pid + '_' + w.title"
+                       :label="w.title + (w.processName ? '  ·  ' + w.processName : '')" :value="w.title" />
+          </el-select>
+          <el-button :loading="winLoading" :disabled="recording" @click="loadWindows">刷新窗口</el-button>
+        </template>
+
+        <!-- Web：填起始 URL -->
+        <el-input v-else v-model="windowTitle" placeholder="起始 URL，如 http://localhost:3000"
+                  style="width:300px;" :disabled="recording" />
 
         <el-button v-if="!recording" type="danger" @click="startRecording" :loading="starting">
           <el-icon><VideoPlay /></el-icon> 开始录制
@@ -20,8 +32,9 @@
           <el-icon><VideoPause /></el-icon> 停止录制
         </el-button>
 
-        <el-tag v-if="recording" type="danger" effect="dark" style="animation: blink 1s infinite;">
-          🔴 录制中...（支持捕获点击、输入、Enter/Tab 等按键）
+        <el-tag v-if="recording" type="danger" effect="dark"
+                style="animation: blink 1s infinite; background:#f56565 !important; border-color:#f56565 !important; color:#fff !important; font-weight:600;">
+          🔴 录制中...（{{ sceneType === 'web' ? '在弹出的浏览器里操作' : '支持捕获点击、输入、Enter/Tab 等按键' }}）
         </el-tag>
 
         <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
@@ -160,7 +173,13 @@ const recording      = ref(false)
 const starting       = ref(false)
 const saving         = ref(false)
 const showSaveDialog = ref(false)
+const sceneType      = ref('wpf')
 const windowTitle    = ref('SmartZaiko')
+
+// 切换录制类型时，把目标字段重置为该类型的合理默认
+function onTypeChange(t: string) {
+  windowTitle.value = t === 'web' ? 'http://localhost:3000' : 'SmartZaiko'
+}
 const saveName       = ref('')
 const steps          = ref<any[]>([])
 
@@ -188,11 +207,11 @@ async function connectSignalR() {
 async function startRecording() {
   starting.value = true
   try {
-    await api.post('/recording/start', { windowTitle: windowTitle.value })
+    await api.post('/recording/start', { windowTitle: windowTitle.value, type: sceneType.value })
     recording.value = true
     steps.value = []
     saveName.value = `录制场景_${new Date().toLocaleTimeString('zh-CN', { hour:'2-digit', minute:'2-digit' })}`
-    ElMessage.success('录制已开始，请在被测应用中操作')
+    ElMessage.success(sceneType.value === 'web' ? '浏览器录制已开始，请在弹出的浏览器里操作' : '录制已开始，请在被测应用中操作')
   } catch (e: any) {
     ElMessage.error(e.response?.data?.error || '启动录制失败')
   } finally {
@@ -252,6 +271,7 @@ async function saveScenario(runAfterSave: boolean) {
     const res = await api.post('/recording/save', {
       name: saveName.value,
       windowTitle: windowTitle.value,
+      type: sceneType.value,
       steps: steps.value
     })
     ElMessage.success(res.data.message)

@@ -19,6 +19,9 @@
             {{ form.type === 'web' ? '🌐 Web 网页' : '🖥 WPF 桌面' }}
           </el-tag>
           <span style="color:#909399; font-size:12px;">（创建后不可修改）</span>
+          <div v-if="form.type === 'web'" style="color:#e6a23c; font-size:12px; margin-top:6px;">
+            ⓘ Web 场景走 AI 推理执行（浏览器自动化），暂不支持录制回放。
+          </div>
         </el-form-item>
         <el-form-item :label="form.type === 'web' ? '起始 URL' : '目标窗口'">
           <el-input v-if="form.type === 'web'" v-model="form.windowTitle"
@@ -52,17 +55,16 @@
                 <b>浏览器工具（网页自动化）</b>
                 <el-divider style="margin:6px 0;" />
                 <div style="font-family:monospace; font-size:12px; color:#333;">
-                  <div>1. browser_connect() → 连接Chrome</div>
-                  <div>2. browser_navigate("http://xxx") → 跳转</div>
-                  <div>3. browser_scan() → 扫描页面元素</div>
-                  <div>4. browser_click("#btnLogin") → 点击</div>
-                  <div>5. browser_fill("#username", "admin") → 填写</div>
-                  <div>6. browser_click_text("提交") → 按文字点击</div>
+                  <div>1. browser_scan() → 扫描页面元素</div>
+                  <div>2. browser_fill("#username", "admin") → 填写</div>
+                  <div>3. browser_select("#product", "苹果") → 下拉选择</div>
+                  <div>4. browser_click("#agree") → 点击（复选框等）</div>
+                  <div>5. browser_click_text("提交订单") → 按文字点击</div>
+                  <div>6. assert_text("#result", "成功") → 断言</div>
                 </div>
                 <el-divider style="margin:6px 0;" />
                 <div style="color:#909399; font-size:12px;">
-                  启动Chrome时加参数：<br/>
-                  <code style="background:#f5f7fa;padding:2px 4px;">--remote-debugging-port=9222</code>
+                  起始 URL 在上方「起始 URL」填写，运行时会自动打开浏览器并导航，无需手动启动 Chrome。
                 </div>
               </div>
             </el-popover>
@@ -80,7 +82,7 @@
       </el-card>
 
       <!-- 录制步骤 -->
-      <el-card v-if="form.type !== 'web'" style="margin-bottom: 20px;">
+      <el-card style="margin-bottom: 20px;">
         <template #header>
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span>
@@ -109,13 +111,14 @@
                 </template>
               </el-dropdown>
               <el-button size="small" type="success" :disabled="!form.windowTitle" @click="appendRecord">
-                <el-icon><VideoCamera /></el-icon> 末尾追加录制
+                <el-icon><VideoCamera /></el-icon> {{ form.type === 'web' ? '开始网页录制' : '末尾追加录制' }}
               </el-button>
             </div>
 
             <!-- 录制态：停止并应用 / 取消 -->
             <div v-else style="display:flex; gap:8px; align-items:center;">
-              <el-tag type="danger" effect="dark" style="animation: rec-blink 1s infinite;">🔴 录制中</el-tag>
+              <el-tag type="danger" effect="dark"
+                      style="animation: rec-blink 1s infinite; background:#f56565 !important; border-color:#f56565 !important; color:#fff !important; font-weight:600;">🔴 录制中</el-tag>
               <el-button size="small" type="primary" @click="stopAndApply" :loading="applying">停止并应用</el-button>
               <el-button size="small" @click="cancelRecord">取消</el-button>
             </div>
@@ -166,9 +169,12 @@
         <!-- 录制中：实时显示新录的步骤 -->
         <div v-if="recording" class="live-rec">
           <div class="live-rec-head">
-            🔴 正在录制新步骤（接在第 {{ recordFromIndex }} 步之后）— 请切换到被测应用「{{ form.windowTitle }}」操作
+            🔴 正在录制新步骤（接在第 {{ recordFromIndex }} 步之后）—
+            {{ form.type === 'web' ? '请在弹出的浏览器窗口中操作' : `请切换到被测应用「${form.windowTitle}」操作` }}
           </div>
-          <div v-if="liveSteps.length === 0" class="live-rec-empty">等待操作…在被测应用中点击 / 输入即可实时出现</div>
+          <div v-if="liveSteps.length === 0" class="live-rec-empty">
+            {{ form.type === 'web' ? '等待操作…在弹出的浏览器里点击 / 输入即可实时出现' : '等待操作…在被测应用中点击 / 输入即可实时出现' }}
+          </div>
           <div v-for="(s, i) in liveSteps" :key="i" class="live-rec-item">
             <span class="live-rec-num">{{ recordFromIndex + i + 1 }}</span>
             <el-tag size="small" type="warning">{{ s.action }}</el-tag>
@@ -454,9 +460,10 @@ async function appendRecord() {
 
 async function beginRecording(fromIndex: number) {
   try {
-    await recordingApi.start(form.windowTitle)
+    await recordingApi.start(form.windowTitle, form.type)
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.error || '启动录制失败，请确认目标窗口已打开')
+    ElMessage.error(e.response?.data?.error ||
+      (form.type === 'web' ? '启动浏览器录制失败，请确认起始 URL 正确' : '启动录制失败，请确认目标窗口已打开'))
     return
   }
   backupSteps        = [...steps.value]

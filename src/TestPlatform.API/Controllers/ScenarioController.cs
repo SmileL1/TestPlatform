@@ -156,6 +156,30 @@ public class ScenarioController : ControllerBase
             MaxSteps        = 30,
             CreatedAt       = DateTime.UtcNow,
             UpdatedAt       = DateTime.UtcNow
+        },
+        new Scenario
+        {
+            Id          = Guid.NewGuid(),
+            Type        = "web",
+            Name        = "Web示例：Demo商城下单",
+            WindowTitle = "http://localhost:3000",   // web 场景：此字段存起始 URL
+            Description = """
+                这是一个下单网页（samples/web-demo，需先本地起在 http://localhost:3000）。请完成一次成功下单：
+                1. browser_scan 了解页面元素
+                2. browser_fill("#username", "{{用户名}}") 填用户名
+                3. browser_fill("#password", "{{密码}}") 填密码
+                4. browser_select("#product", "苹果") 选择商品
+                5. browser_fill("#qty", "{{数量}}") 填数量
+                6. browser_click("#agree") 勾选同意条款
+                7. browser_click_text("提交订单") 提交
+                8. assert_text("#result", "下单成功") 确认成功横幅出现
+                9. done(success=true) 报告结果
+                """,
+            ParametersJson  = """[{"name":"用户名","label":"用户名","defaultValue":"alice"},{"name":"密码","label":"密码","defaultValue":"123456"},{"name":"数量","label":"数量","defaultValue":"2"}]""",
+            AssertionsJson  = """["页面出现「下单成功」","无错误提示"]""",
+            MaxSteps        = 40,
+            CreatedAt       = DateTime.UtcNow,
+            UpdatedAt       = DateTime.UtcNow
         }
     };
 }

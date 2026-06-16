@@ -11,19 +11,27 @@ namespace TestPlatform.API.Controllers;
 public class RecordingController : ControllerBase
 {
     private readonly IRecorder _recorder;
+    private readonly IBrowserRecorder _browserRecorder;
     private readonly AppDbContext _db;
 
-    public RecordingController(IRecorder recorder, AppDbContext db)
+    public RecordingController(IRecorder recorder, IBrowserRecorder browserRecorder, AppDbContext db)
     {
         _recorder = recorder;
+        _browserRecorder = browserRecorder;
         _db = db;
     }
 
     [HttpPost("start")]
-    public IActionResult Start([FromBody] StartRecordingRequest req)
+    public async Task<IActionResult> Start([FromBody] StartRecordingRequest req)
     {
         try
         {
+            if (req.Type == "web")
+            {
+                // web 场景：WindowTitle 字段存的是起始 URL
+                await _browserRecorder.StartAsync(req.WindowTitle ?? "");
+                return Ok(new { message = "浏览器录制已开始", url = req.WindowTitle });
+            }
             _recorder.Start(req.WindowTitle ?? "SmartZaiko");
             return Ok(new { message = "录制已开始", windowTitle = req.WindowTitle });
         }
@@ -34,27 +42,33 @@ public class RecordingController : ControllerBase
     }
 
     [HttpPost("stop")]
-    public IActionResult Stop()
+    public async Task<IActionResult> Stop()
     {
-        var steps = _recorder.Stop();
+        var steps = _browserRecorder.IsRecording ? await _browserRecorder.StopAsync() : _recorder.Stop();
         return Ok(new { steps, count = steps.Count });
     }
 
     [HttpGet("steps")]
     public IActionResult GetSteps()
-        => Ok(new { steps = _recorder.GetSteps(), isRecording = _recorder.IsRecording });
+    {
+        var web = _browserRecorder.IsRecording;
+        var steps = web ? _browserRecorder.GetSteps() : _recorder.GetSteps();
+        return Ok(new { steps, isRecording = web || _recorder.IsRecording });
+    }
 
     [HttpDelete("steps/{index:int}")]
     public IActionResult DeleteStep(int index)
     {
-        _recorder.DeleteStep(index);
+        if (_browserRecorder.IsRecording) _browserRecorder.DeleteStep(index);
+        else _recorder.DeleteStep(index);
         return Ok();
     }
 
     [HttpPost("clear")]
     public IActionResult Clear()
     {
-        _recorder.Clear();
+        if (_browserRecorder.IsRecording) _browserRecorder.Clear();
+        else _recorder.Clear();
         return Ok();
     }
 
@@ -92,6 +106,7 @@ public class RecordingController : ControllerBase
         var scenario = new Scenario
         {
             Id             = Guid.NewGuid(),
+            Type           = req.Type ?? "wpf",
             Name           = req.Name ?? $"录制场景_{DateTime.Now:MMdd_HHmm}",
             WindowTitle    = req.WindowTitle ?? "SmartZaiko",
             Description    = description,
@@ -173,12 +188,16 @@ public class RecordingController : ControllerBase
 public class StartRecordingRequest
 {
     public string? WindowTitle { get; set; }
+    /// <summary>wpf（默认）/ web。web 时 WindowTitle 存起始 URL。</summary>
+    public string? Type { get; set; }
 }
 
 public class SaveScenarioRequest
 {
     public string? Name        { get; set; }
     public string? WindowTitle { get; set; }
+    /// <summary>wpf（默认）/ web。web 时 WindowTitle 存起始 URL。</summary>
+    public string? Type        { get; set; }
     /// <summary>前端编辑后的步骤列表（为空则用服务端录制的原始步骤）</summary>
     public List<RecordedStep>? Steps { get; set; }
 }

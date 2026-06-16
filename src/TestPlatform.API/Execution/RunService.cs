@@ -5,6 +5,7 @@ using TestPlatform.API.Hubs;
 using TestPlatform.API.Logging;
 using TestPlatform.API.Recording;
 using TestPlatform.API.Settings;
+using TestPlatform.API.Web;
 using TestPlatform.API.Wpf;
 using TestPlatform.Core.DB;
 using TestPlatform.Core.Entities;
@@ -95,6 +96,13 @@ public class RunService : IRunService
         var cfg = await _settings.GetResolvedAsync();
         try
         {
+            // Web 场景：浏览器自动化，仅 AI 推理执行（暂无结构化回放）
+            if (scenario.Type == "web")
+            {
+                await ExecuteWebAsync(runId, scenario, inputParams, mode, cfg, ct);
+                return;
+            }
+
             bool hasSteps = !string.IsNullOrWhiteSpace(scenario.StepsJson) && scenario.StepsJson != "[]";
             bool structured = mode switch
             {
@@ -220,6 +228,100 @@ public class RunService : IRunService
         {
             lock (_lock) _running.Remove(runId);
         }
+    }
+
+    /// <summary>Web 场景执行：有录制步骤且非 ai 模式走结构化回放，否则走 LLM 工具调用；落库/推送同 WPF 路径。</summary>
+    private async Task ExecuteWebAsync(Guid runId, Scenario scenario,
+        Dictionary<string, string> inputParams, string mode, Dictionary<string, string?> cfg, CancellationToken ct)
+    {
+        var db = _db.CreateClient();
+
+        bool hasSteps = !string.IsNullOrWhiteSpace(scenario.StepsJson) && scenario.StepsJson != "[]";
+        bool structured = mode switch
+        {
+            "structured" => true,
+            "ai"         => false,
+            _            => hasSteps   // auto：有录制步骤走结构化
+        };
+
+        var startUrl = scenario.WindowTitle;   // web 场景：该字段存起始 URL
+        var goal = scenario.Description;
+        foreach (var (k, v) in inputParams) goal = goal.Replace($"{{{{{k}}}}}", v);
+
+        await PushLog(runId, 0, "system", "",
+            $"▶ 开始执行：{scenario.Name}  [Web · {(structured ? "结构化回放" : "AI 推理执行")}]　起始URL：{startUrl}", true);
+
+        VisionVerifier? vision = null;
+        if (scenario.AiVerifyEnabled)
+        {
+            vision = new VisionVerifier(cfg["AiVision:ApiKey"], cfg["AiVision:Model"], cfg["AiVision:BaseUrl"]);
+            await PushLog(runId, 0, "system", "", "判定方式：执行 + AI 截图验证", true);
+        }
+
+        string status; int totalSteps; int tokenUsed = 0; string summary; string errorMsg;
+
+        await using var driver = new BrowserDriver();
+
+        if (structured)
+        {
+            var steps = JsonSerializer.Deserialize<List<RecordedStep>>(scenario.StepsJson!,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+
+            var player = new BrowserStepPlayer(driver, inputParams)
+            {
+                OnStep = d => PushLog(runId, d.StepNumber, d.ToolName, d.Arguments, d.Result, d.Success)
+            };
+            var r = await player.RunAsync(startUrl, steps, vision, goal, scenario.AiVerifyPrompt, ct);
+
+            status     = r.Success ? "passed" : "failed";
+            totalSteps = r.TotalSteps;
+            summary    = r.Success
+                ? (r.AiChecked ? $"测试通过：{r.TotalSteps} 步回放成功；AI 判定通过" : $"测试通过：{r.TotalSteps} 步回放成功")
+                : r.FailureReason;
+            errorMsg   = r.FailureReason;
+        }
+        else
+        {
+            var apiKey  = cfg["DeepSeek:ApiKey"]  ?? throw new Exception("未配置 DeepSeek:ApiKey（请在「设置」页填写操作 API Key）");
+            var model   = cfg["DeepSeek:Model"]   ?? "deepseek-chat";
+            var baseUrl = cfg["DeepSeek:BaseUrl"] ?? "https://api.deepseek.com";
+
+            await PushLog(runId, 0, "system", $"模型：{model}", $"【AI 目标】\n{goal}", true);
+
+            var assertions = new List<string>();
+            try { assertions = JsonSerializer.Deserialize<List<string>>(scenario.AssertionsJson) ?? new(); }
+            catch { }
+
+            var agent = new WebAiAgent(new DeepSeekClient(apiKey, model, baseUrl, BrowserToolSchemas.All), driver)
+            {
+                OnStep = d => PushLog(runId, d.StepNumber, d.ToolName, d.Arguments, d.Result, d.Success, d.Thinking)
+            };
+            var r = await agent.RunAsync(scenario.Name, startUrl, goal, assertions,
+                scenario.MaxSteps, vision, scenario.AiVerifyPrompt, ct);
+
+            status     = r.Success ? "passed" : "failed";
+            totalSteps = r.TotalSteps;
+            tokenUsed  = r.TokenUsed;
+            summary    = r.Success ? r.Summary : r.FailureReason;
+            errorMsg   = r.FailureReason;
+        }
+
+        await db.Updateable<TestRun>()
+            .SetColumns(t => new TestRun
+            {
+                Status     = status,
+                FinishedAt = DateTime.UtcNow,
+                TotalSteps = totalSteps,
+                TokenUsed  = tokenUsed,
+                ErrorMsg   = errorMsg
+            })
+            .Where(t => t.Id == runId).ExecuteCommandAsync();
+
+        await _hub.Clients.Group($"run_{runId}").SendAsync("RunFinished", new
+        {
+            runId, status, summary,
+            finishedAt = DateTime.UtcNow.ToString("o")
+        });
     }
 
     private static string BuildSummary(PlayResult r)

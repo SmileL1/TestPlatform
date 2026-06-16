@@ -45,14 +45,17 @@ public class DeepSeekClient
     private readonly HttpClient _http;
     private readonly string _model;
     private readonly string _baseUrl;
+    private readonly List<object> _tools;
     private readonly List<object> _history = new();
 
     public int TotalTokensUsed { get; private set; }
 
-    public DeepSeekClient(string apiKey, string model, string baseUrl)
+    /// <param name="tools">本次会话暴露给 LLM 的工具集；为 null 时默认用 WPF 工具（<see cref="ToolSchemas.All"/>）。</param>
+    public DeepSeekClient(string apiKey, string model, string baseUrl, List<object>? tools = null)
     {
         _model   = model;
         _baseUrl = baseUrl;
+        _tools   = tools ?? ToolSchemas.All;
         _http    = new HttpClient { Timeout = TimeSpan.FromSeconds(120) };
         _http.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
     }
@@ -86,7 +89,7 @@ public class DeepSeekClient
         {
             model       = _model,
             messages,
-            tools       = ToolSchemas.All,
+            tools       = _tools,
             tool_choice = "auto",
             temperature = 0.1,
             max_tokens  = 4096
