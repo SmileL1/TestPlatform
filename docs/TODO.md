@@ -44,7 +44,7 @@
 - [ ] **补充自动化测试**：当前无单测/集成测试工程，至少为 `StepPlayer` 断言求值、`SettingsService` 加解密、`VisionVerifier` 解析加测试。
 - [ ] **CI**：加 GitHub Actions（Windows runner）做 `dotnet build` 与前端 `npm run build` 校验。
 - [ ] **配置样例**：提供 `appsettings.Example.json` 与前端 `.env.example`。
-- [ ] **README 截图**：按 `docs/images/README.md` 清单补齐 8 张界面截图。
+- [ ] **README 截图**：补齐各功能页界面截图（占位于 `docs/images/`）。
 - [ ] **`docs/design.md` 与代码同步**：已随本次刷新；后续重构类/接口时同步更新。
 
 ---

@@ -1,12 +1,16 @@
 # TestPlatform — AI 驱动的 WPF 自动化测试平台
 
-> 面向日语仓库管理系统 **SmartZaiko** 的智能自动化测试平台。
+> 面向 **WPF 桌面应用** 的智能自动化测试平台。
 > 同时提供 **AI 推理执行** 与 **录制回放** 两套引擎，结合 **AI 截图验证** 做结果判定，
 > 通过 SignalR 实时推送每一步执行过程。
 
-<!-- 截图占位：拍摄说明见 docs/images/README.md -->
 ![实时执行监控](docs/images/05-task-monitor.png)
 *实时监控页：逐步展示工具调用、参数、结果与 AI 思考，底部给出最终判定*
+
+> 💡 **提高准确率的关键**：平台通过 Windows UIAutomation 的 `AutomationId` 定位控件。
+> **建议在被测 WPF 项目中为关键控件设置 `AutomationProperties.AutomationId`**——
+> 控件有稳定的 AutomationId 时，录制回放与 AI 操作都能精确命中；
+> 缺失时只能退回名称/坐标匹配，准确率与跨环境稳定性都会明显下降。
 
 ---
 
@@ -109,13 +113,13 @@ npm run dev        # Vite 默认 http://localhost:5173
 POST http://localhost:5000/api/scenarios/seed
 ```
 
-会导入「基本传票发行」「传票保留」「新建明细行」三个示例场景。
+会导入若干内置示例场景，便于快速体验录制回放与 AI 执行（示例数据可按需删除或替换为自己的被测应用场景）。
 
 ---
 
 ## 界面预览
 
-> 以下为各功能页占位，截图拍摄清单见 [docs/images/README.md](docs/images/README.md)。
+> 以下为各功能页占位，补充对应截图后即可显示。
 
 | 测试计划 | 场景列表 |
 |---------|---------|

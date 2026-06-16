@@ -53,7 +53,7 @@
                         │ PostgreSQL          │ UIAutomation/Win32  │ HTTPS
         ┌───────────────▼──────┐  ┌───────────▼──────┐  ┌──────────▼─────────┐
         │ scenarios test_runs  │  │ WPF 被测应用      │  │ DeepSeek / 多模态  │
-        │ run_logs test_plan*  │  │ (SmartZaiko)     │  │ (OpenAI 兼容)      │
+        │ run_logs test_plan*  │  │ (WPF 被测应用)    │  │ (OpenAI 兼容)      │
         └──────────────────────┘  └──────────────────┘  └────────────────────┘
 ```
 
@@ -122,7 +122,7 @@ src/
 | suite_id | uuid NULL | 所属套件（可空） |
 | type | varchar(20) | `wpf`（默认）/ `web`（保留未实现） |
 | name | varchar | 场景名称 |
-| window_title | varchar | 目标窗口标题（默认 `SmartZaiko`） |
+| window_title | varchar | 目标窗口标题，用于 UIAutomation 定位被测 WPF 窗口 |
 | description | text | AI 目标 / 自然语言步骤，支持 `{{参数}}` |
 | steps_json | text NULL | 录制步骤（结构化模式使用） |
 | parameters_json | text | 参数定义 `[{name,label,defaultValue}]` |
@@ -289,7 +289,7 @@ CRUD + `GET /suites/{id}/scenarios`；删除套件时把其下场景 `suite_id` 
 | `assert_text` | 断言控件文本包含 |
 | `done` | 报告结果（success + summary） |
 
-`DeepSeekClient` 维护对话历史，按需压缩旧的 `scan_ui` 结果以省 token；`TotalTokensUsed` 计入 `TestRun.TokenUsed`。系统提示中内置 SmartZaiko 的已知 AutomationId 与操作规则，减少 `scan_ui` 调用。
+`DeepSeekClient` 维护对话历史，按需压缩旧的 `scan_ui` 结果以省 token；`TotalTokensUsed` 计入 `TestRun.TokenUsed`。系统提示中内置被测应用的已知 AutomationId 与操作规则，减少 `scan_ui` 调用。
 
 ### 2.6 结构化回放引擎
 

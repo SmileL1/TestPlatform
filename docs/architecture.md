@@ -9,8 +9,7 @@
 
 ## 1. 系统定位
 
-TestPlatform 是一套**针对 Windows 桌面（WPF）应用的自动化测试平台**，被测对象为日语仓库管理系统 SmartZaiko。
-它解决两个核心痛点：
+TestPlatform 是一套**针对 Windows 桌面（WPF）应用的自动化测试平台**。它解决两个核心痛点：
 
 1. **不会写代码的测试人员也能造测试** —— 通过「录制操作 → 回放」生成结构化用例。
 2. **界面/数据多变导致脚本脆弱** —— 通过「LLM 逐步推理操作」+「AI 截图验证结果」提升鲁棒性。
@@ -46,7 +45,7 @@ flowchart TB
     end
 
     DB[("PostgreSQL")]
-    SUT["WPF 被测应用<br/>SmartZaiko"]
+    SUT["WPF 被测应用"]
     LLM["DeepSeek / 多模态模型<br/>(OpenAI 兼容)"]
 
     UI -- "HTTP REST" --> CTRL
@@ -225,8 +224,22 @@ erDiagram
         bool aiVerifyEnabled
         int maxSteps
     }
-    TEST_RUN { uuid id PK; uuid scenarioId; string status; int totalSteps; int tokenUsed }
-    RUN_LOG { uuid id PK; uuid runId; int stepNumber; string toolName; text result; text thinking; bool success }
+    TEST_RUN {
+        uuid id PK
+        uuid scenarioId
+        string status
+        int totalSteps
+        int tokenUsed
+    }
+    RUN_LOG {
+        uuid id PK
+        uuid runId
+        int stepNumber
+        string toolName
+        text result
+        text thinking
+        bool success
+    }
 ```
 
 - 主键统一 `uuid`（非自增），由 `DbContext` 的 `EntityService` 关掉 `IsIdentity`。
