@@ -1,0 +1,14 @@
+@TestPlatform.API_HostAddress = http://localhost:5000
+
+### 场景列表
+GET {{TestPlatform.API_HostAddress}}/api/scenarios
+Accept: application/json
+
+### 导入示例场景
+POST {{TestPlatform.API_HostAddress}}/api/scenarios/seed
+
+### 枚举桌面窗口
+GET {{TestPlatform.API_HostAddress}}/api/system/windows
+Accept: application/json
+
+###

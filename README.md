@@ -1,0 +1,182 @@
+# TestPlatform — AI 驱动的 WPF 自动化测试平台
+
+> 面向日语仓库管理系统 **SmartZaiko** 的智能自动化测试平台。
+> 同时提供 **AI 推理执行** 与 **录制回放** 两套引擎，结合 **AI 截图验证** 做结果判定，
+> 通过 SignalR 实时推送每一步执行过程。
+
+<!-- 截图占位：拍摄说明见 docs/images/README.md -->
+![实时执行监控](docs/images/05-task-monitor.png)
+*实时监控页：逐步展示工具调用、参数、结果与 AI 思考，底部给出最终判定*
+
+---
+
+## 功能亮点
+
+| 功能 | 说明 |
+|------|------|
+| **AI 推理执行** | 接入 DeepSeek，通过 Tool Calling 让 LLM 逐步操作 WPF 控件，自动完成未录制的探索性场景 |
+| **录制回放** | 鼠标钩子 + 键盘钩子 + UIAutomation 属性事件三路合流录制操作，一键回放，无需写代码 |
+| **结构化验证** | 回放结束按 `equals/contains/exists/textVisible/noDialog…` 等条件判定，而非仅看步骤是否报错 |
+| **AI 截图验证** | 执行完对结果界面截图，交多模态模型独立判断「是否真的成功」，可与结构化验证叠加 |
+| **测试计划** | 把多个场景编成计划，顺序批量执行并统计通过/失败 |
+| **实时监控** | SignalR 实时推送每步日志、AI 思考过程、录制步骤与最终结果 |
+| **参数化场景** | 描述与步骤中用 `{{参数名}}` 占位，运行时注入实际值 |
+| **可视化设置** | 「设置」页在线管理两套 AI 接口配置，API Key 加密落库、不回传明文 |
+
+---
+
+## 技术栈
+
+**后端** — ASP.NET Core 9 Web API，目标框架 `net9.0-windows`
+
+- Windows UIAutomation + WPF/WinForms Runtime（桌面控件驱动，强依赖 Windows）
+- Win32 低级鼠标/键盘钩子（`WH_MOUSE_LL` / `WH_KEYBOARD_LL`，操作录制）
+- SqlSugar ORM + PostgreSQL（CodeFirst 自动建表）
+- ASP.NET Core SignalR（实时推送）
+- DeepSeek（文本推理，Tool Calling）+ 任意 OpenAI 兼容多模态模型（截图验证）
+- System.Drawing.Common（截图）
+
+**前端** — Vue 3 + TypeScript + Vite
+
+- Element Plus UI 组件库 · Pinia 状态管理 · Vue Router
+- `@microsoft/signalr` 实时客户端 · Axios
+- 设计风格：瑞士排版编辑风（暖纸浅底 + 衬线/等宽混排，无渐变）
+
+> ⚠️ **当前仅实现 WPF/桌面自动化**。`Scenario.Type` 保留了 `web` 取值，但代码中尚无浏览器驱动，
+> Web 模式属规划项，详见 [docs/TODO.md](docs/TODO.md)。
+
+---
+
+## 快速开始
+
+### 前置要求
+
+- Windows 10/11（后端强依赖 Windows UIAutomation，**不可在 Linux/macOS 运行**）
+- .NET 9 SDK
+- Node.js 18+
+- PostgreSQL 14+
+- DeepSeek API Key（AI 模式必需）；多模态模型 Key（启用 AI 截图验证时需要）
+
+### 1. 配置数据库与 AI 接口
+
+编辑 `src/TestPlatform.API/appsettings.json`：
+
+```json
+{
+  "ConnectionStrings": {
+    "Default": "Host=localhost;Port=5432;Database=test_platform;Username=postgres;Password=你的密码"
+  },
+  "DeepSeek": {
+    "ApiKey": "sk-xxxxxxxx",
+    "Model": "deepseek-chat",
+    "BaseUrl": "https://api.deepseek.com"
+  },
+  "AiVision": {
+    "ApiKey": "",
+    "Model": "qwen-vl-max",
+    "BaseUrl": "https://dashscope.aliyuncs.com/compatible-mode"
+  }
+}
+```
+
+- `DeepSeek` 用于**操作**（纯文本推理，无需识图）。
+- `AiVision` 用于**截图验证**（需多模态模型，如 `qwen-vl-max` / `gpt-4o`；留空则 AI 验证自动跳过）。
+- 以上也可在启动后于「设置」页在线修改，API Key 会**加密存库**并优先于 `appsettings.json` 生效。
+
+数据库会在首次启动时**自动创建 + 迁移**，无需手动建表。
+
+### 2. 启动后端
+
+```powershell
+# 目标框架必须是 net9.0-windows（依赖 WPF / UIAutomation）
+dotnet run --project src/TestPlatform.API/TestPlatform.API.csproj --framework net9.0-windows
+```
+
+默认监听 `http://localhost:5000`（与前端请求的 `http://localhost:5000/api` 及 SignalR `/hubs/test` 一致，开箱即用）。
+本地 DeepSeek Key 可放进 `appsettings.Development.json`（已被 `.gitignore` 忽略）或在「设置」页填写。
+
+### 3. 启动前端
+
+```powershell
+cd web/testplatform-web
+npm install
+npm run dev        # Vite 默认 http://localhost:5173
+```
+
+### 4. 导入示例场景（可选）
+
+```
+POST http://localhost:5000/api/scenarios/seed
+```
+
+会导入「基本传票发行」「传票保留」「新建明细行」三个示例场景。
+
+---
+
+## 界面预览
+
+> 以下为各功能页占位，截图拍摄清单见 [docs/images/README.md](docs/images/README.md)。
+
+| 测试计划 | 场景列表 |
+|---------|---------|
+| ![测试计划](docs/images/01-plan-list.png) | ![场景列表](docs/images/02-scenario-list.png) |
+
+| 操作录制 | 设置 |
+|---------|------|
+| ![操作录制](docs/images/04-recording.png) | ![设置](docs/images/08-settings.png) |
+
+---
+
+## 执行模式
+
+`POST /api/tasks/run` 的 `mode` 字段决定走哪套引擎：
+
+| 模式 | 触发条件 | 适用场景 |
+|------|----------|----------|
+| `auto`（默认） | 场景有录制步骤 → 结构化回放；否则 → AI 推理 | 日常使用 |
+| `structured` | 强制回放录制步骤 | 高准确率回归测试 |
+| `ai` | 强制调用 DeepSeek 逐步推理 | 复杂逻辑 / 无录制步骤的探索性测试 |
+
+**判定逻辑**：结构化回放下，若设了验证条件则按条件判定（步骤偶发失败不直接判失败，会重试一次）；
+若开启 AI 截图验证则二者（启用的）都通过才算通过；都没设才退化为「所有步骤无失败」。
+
+---
+
+## 项目结构
+
+```
+TestPlatform/
+├── src/
+│   ├── TestPlatform.Core/          # 实体 + DbContext（SqlSugar + PostgreSQL）
+│   │   ├── Entities/               # Scenario / TestRun / RunLog / TestPlan* / TestSuite / AppSetting
+│   │   └── DB/DbContext.cs         # CreateClient() + InitDatabase()（CodeFirst）
+│   └── TestPlatform.API/           # Web API 主项目（net9.0-windows）
+│       ├── Program.cs              # 启动：建库 + 迁移 + 服务注册 + SignalR
+│       ├── Controllers/            # Scenario/Task/TestPlan/Recording/Suite/Settings/System
+│       ├── Hubs/TestHub.cs         # SignalR：按 run_{id} / recording 分组
+│       ├── Ai/                     # AiAgent · DeepSeekClient · ToolSchemas · VisionVerifier
+│       ├── Execution/              # RunService（调度）· StepPlayer（回放）· Assertion
+│       ├── Recording/              # Recorder · HookHost · RecordedStep
+│       ├── Wpf/                    # WpfDriver · ElementFinder · Input · Screenshot
+│       ├── Settings/               # SettingsService · SecretProtector（密钥加解密）
+│       └── Logging/                # AiLog · LogCleanupService
+└── web/testplatform-web/           # Vue 3 前端
+    └── src/views/                  # Plan* / Scenario* / TaskMonitor / Recording / History / Settings
+```
+
+---
+
+## 文档
+
+| 文档 | 说明 |
+|------|------|
+| [架构设计文档](docs/architecture.md) | 系统架构、技术选型、模块职责、数据流、部署 |
+| [需求设计文档](docs/requirements.md) | 功能/非功能需求、角色、用例、验收标准 |
+| [详细设计文档](docs/design.md) | 数据库、REST API、SignalR、执行/录制引擎细节 |
+| [TODO / 路线图](docs/TODO.md) | 已知缺口与后续规划 |
+
+---
+
+## 许可证
+
+MIT

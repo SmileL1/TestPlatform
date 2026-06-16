@@ -1,0 +1,262 @@
+/* ============================================================
+   全局设计系统 · 瑞士排版编辑风 (Swiss / Editorial)
+   ------------------------------------------------------------
+   原则（来自 huashu-design 反 AI slop 规则）：
+   - 高反差衬线 display 标题 + 干净无衬线正文 + 等宽数字
+   - 纯黑白 + 暖纸底，单一墨黑点缀，状态色克制去饱和
+   - 锐利边角（≈2px）、发丝分隔线、几乎无投影、大留白、编号
+   - 禁用：紫渐变 / 圆角+左 border accent / emoji 当图标 / 重彩标签
+   ============================================================ */
+:root {
+  /* ── 墨黑点缀：primary 即「墨」，全站唯一强调 ── */
+  --el-color-primary: #1a1916;
+  --el-color-primary-light-3: #44423c;
+  --el-color-primary-light-5: #6b6960;
+  --el-color-primary-light-7: #9c9a90;
+  --el-color-primary-light-8: #c5c3ba;
+  --el-color-primary-light-9: #ecebe5;
+  --el-color-primary-dark-2: #000000;
+
+  /* ── 状态色：去饱和、印刷感，不抢戏 ── */
+  --el-color-success: #3f7d5b;
+  --el-color-warning: #b07a2e;
+  --el-color-danger:  #a23b32;
+  --el-color-info:    #8a887f;
+
+  /* ── 锐利边角 ── */
+  --el-border-radius-base: 2px;
+  --el-border-radius-small: 2px;
+  --el-border-radius-round: 2px;
+
+  /* ── 暖纸 + 墨 + 发丝线 ── */
+  --app-bg:       #f5f4f0;   /* 暖纸底 */
+  --app-surface:  #ffffff;   /* 卡面 */
+  --app-ink:      #16150f;   /* 主墨色文字 */
+  --app-text:     #16150f;
+  --app-text-sub: #6f6d63;   /* 暖灰副文字 */
+  --app-text-mut: #a3a097;   /* 更弱：占位/编号 */
+  --line:         #e6e3db;   /* 发丝分隔线 */
+  --line-strong:  #1a1916;   /* 编辑式重规则线（标题下） */
+
+  --card-radius: 2px;
+  --card-shadow: none;
+  --card-shadow-hover: 0 1px 0 var(--line);
+
+  /* ── 字体栈 ── */
+  --font-serif: "Playfair Display", "Noto Serif SC", Georgia, "Songti SC",
+                "宋体", serif;
+  --font-sans:  "Inter", "PingFang SC", "Microsoft YaHei", "Segoe UI",
+                -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  --font-mono:  "Space Mono", ui-monospace, "SF Mono", "Cascadia Mono",
+                Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body, #app { height: 100%; margin: 0; padding: 0; }
+body {
+  font-family: var(--font-sans);
+  background: var(--app-bg);
+  color: var(--app-text);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* 段落级排印细节 */
+p, .page-subtitle, .el-table__cell { text-wrap: pretty; }
+
+/* ── 滚动条：低调发丝 ── */
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d6d3c9; border-radius: 0; }
+::-webkit-scrollbar-thumb:hover { background: #bbb7aa; }
+
+/* ── 卡片：纸面 + 发丝边框，去投影去圆角 ── */
+.el-card {
+  border: 1px solid var(--line) !important;
+  border-radius: var(--card-radius) !important;
+  box-shadow: none !important;
+  background: var(--app-surface);
+  transition: border-color .2s ease;
+}
+.el-card:hover { border-color: #d3cfc4 !important; }
+.el-card__header {
+  border-bottom: 1px solid var(--line) !important;
+  font-weight: 600;
+  letter-spacing: .2px;
+  padding: 15px 22px !important;
+}
+.el-card__body { padding: 22px !important; }
+
+/* ── 按钮：方角、低调；primary = 墨黑实心 ── */
+.el-button {
+  border-radius: 2px !important;
+  font-weight: 500;
+  letter-spacing: .2px;
+  font-family: var(--font-sans);
+  border-color: var(--line);
+}
+.el-button--large { border-radius: 2px !important; }
+.el-button--primary {
+  --el-button-bg-color: var(--app-ink);
+  --el-button-border-color: var(--app-ink);
+  --el-button-hover-bg-color: #36342c;
+  --el-button-hover-border-color: #36342c;
+  --el-button-active-bg-color: #000;
+  box-shadow: none;
+}
+.el-button--default:hover {
+  color: var(--app-ink);
+  border-color: var(--app-ink);
+  background: #fff;
+}
+
+/* ── 表格：去外框，发丝行线，等宽小写表头 ── */
+.el-table {
+  --el-table-border-color: var(--line);
+  --el-table-header-bg-color: transparent;
+  --el-table-row-hover-bg-color: #faf9f5;
+  font-size: 13.5px;
+}
+.el-table, .el-table__inner-wrapper::before { background: transparent; }
+.el-table th.el-table__cell {
+  background: transparent !important;
+  color: var(--app-text-sub) !important;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  border-bottom: 1.5px solid var(--line-strong) !important;
+}
+.el-table td.el-table__cell { border-bottom: 1px solid var(--line) !important; }
+.el-table .el-table__cell { padding: 13px 0; }
+/* 去掉斑马纹的灰块，编辑风靠留白而非底色 */
+.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
+  background: transparent !important;
+}
+
+/* ── 标签：描边为主、克制；不要重彩实心 ── */
+.el-tag {
+  border-radius: 2px;
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: .2px;
+  border-width: 1px;
+  background: transparent;
+}
+.el-tag.el-tag--plain { background: transparent; }
+
+/* ── 对话框：方角纸面 ── */
+.el-dialog {
+  border-radius: 3px !important;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  box-shadow: 0 24px 64px rgba(20, 18, 10, .14);
+}
+.el-dialog__header { padding: 22px 26px 0 !important; }
+.el-dialog__body { padding: 20px 26px !important; }
+.el-dialog__title { font-family: var(--font-serif); font-weight: 600; }
+
+/* ── 输入：方角、聚焦墨线 ── */
+.el-input__wrapper, .el-textarea__inner, .el-select__wrapper {
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px var(--line) inset;
+}
+.el-input__wrapper.is-focus,
+.el-select__wrapper.is-focused {
+  box-shadow: 0 0 0 1px var(--app-ink) inset !important;
+}
+
+/* ── 数字 / 时间戳 等宽化（编辑风细节） ── */
+.mono, .el-table .cell time, time { font-family: var(--font-mono); }
+
+/* ============ 通用页面布局工具类 ============ */
+.page {
+  padding: 34px 40px 48px;
+  height: 100%;
+  overflow-y: auto;
+  max-width: 1320px;
+}
+
+/* 列表/卡片型页面：铺满内容区宽度，消除右侧留白 */
+.page--full { max-width: none; }
+
+/* 表格型页面：整页不滚动，仅 el-table 的 body-wrapper 内部滚动
+   （表头 + page-head 固定，长列表在表体里滚） */
+.page--table {
+  max-width: none;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.page--table > .page-head { flex-shrink: 0; }
+/* 表格容器吃满剩余高度；el-table 设 height="100%" 即触发表体内滚动 */
+.page--table .table-wrap {
+  flex: 1;
+  min-height: 0;
+}
+.page--table .table-wrap > .el-table { height: 100% !important; }
+
+/* 固定页眉、内容区单独滚动（表单/设置类页面用） */
+.page--fixed-head {
+  max-width: none;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.page--fixed-head > .page-head { flex-shrink: 0; }
+.page--fixed-head > .page-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  /* 给滚动条与内容留出右侧空隙，避免贴边 */
+  padding-right: 4px;
+}
+.page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 18px;
+  margin-bottom: 26px;
+  border-bottom: 1.5px solid var(--line-strong);
+}
+/* 衬线大标题：编辑风的灵魂 */
+.page-title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -.2px;
+  color: var(--app-ink);
+}
+/* 标题上方的小写 eyebrow（可选，用 data-eyebrow 渲染） */
+.page-title[data-eyebrow]::before {
+  content: attr(data-eyebrow);
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--app-text-mut);
+  margin-bottom: 10px;
+}
+.page-subtitle {
+  font-size: 13.5px;
+  color: var(--app-text-sub);
+  margin-top: 8px;
+  max-width: 56ch;
+}
+
+/* 行内编号（01 / 02 …）编辑式序号 */
+.idx-num {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--app-text-mut);
+  letter-spacing: .5px;
+}

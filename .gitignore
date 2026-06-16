@@ -1,0 +1,32 @@
+# ── .NET ──────────────────────────────────────────────
+bin/
+obj/
+publish/
+*.user
+.vs/
+[Dd]ebug/
+[Rr]elease/
+
+# ── 机密配置（含真实密钥，切勿提交）──────────────────────
+# 真实 ApiKey 放本文件（仅本地），仓库内 appsettings.json 留空占位
+appsettings.Development.json
+appsettings.Production.json
+appsettings.Local.json
+appsettings.*.Local.json
+
+# ── 前端 ─────────────────────────────────────────────
+node_modules/
+web/testplatform-web/dist/
+*.local
+
+# ── 执行产物 ─────────────────────────────────────────
+src/TestPlatform.API/TestResults/
+src/TestPlatform.API/logs/
+
+# ── 设计稿/原型/截图（不上传）───────────────────────
+huashu-design/
+tupian/
+
+# ── 杂项 ─────────────────────────────────────────────
+*.log
+.DS_Store

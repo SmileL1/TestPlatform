@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="6" fill="#16150f"/>
+  <text x="50%" y="51%" text-anchor="middle" dominant-baseline="central"
+        font-family="Georgia, 'Times New Roman', 'Songti SC', serif" font-weight="700"
+        font-size="29" letter-spacing="1" fill="#f5f4f0">TP</text>
+</svg>
