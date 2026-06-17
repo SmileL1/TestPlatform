@@ -33,13 +33,16 @@ public class TaskController : ControllerBase
     }
 
     [HttpGet("history")]
-    public async Task<IActionResult> History([FromQuery] Guid? scenarioId)
+    public async Task<IActionResult> History([FromQuery] Guid? scenarioId, [FromQuery] string? status,
+        [FromQuery] DateTime? from, [FromQuery] DateTime? to)
     {
         var db = _db.CreateClient();
         var query = db.Queryable<TestRun>();
-        if (scenarioId.HasValue)
-            query = query.Where(r => r.ScenarioId == scenarioId.Value);
-        var list = await query.OrderByDescending(r => r.StartedAt).Take(100).ToListAsync();
+        if (scenarioId.HasValue)                query = query.Where(r => r.ScenarioId == scenarioId.Value);
+        if (!string.IsNullOrWhiteSpace(status)) query = query.Where(r => r.Status == status);
+        if (from.HasValue)                      query = query.Where(r => r.StartedAt >= from.Value.ToUniversalTime());
+        if (to.HasValue)                        query = query.Where(r => r.StartedAt <= to.Value.ToUniversalTime());
+        var list = await query.OrderByDescending(r => r.StartedAt).Take(500).ToListAsync();
         return Ok(list);
     }
 

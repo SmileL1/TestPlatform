@@ -39,6 +39,10 @@
           <el-option label="运行中" value="running" />
           <el-option label="已取消" value="cancelled" />
         </el-select>
+        <el-date-picker v-if="dim !== 'plan'" v-model="dateRange" type="daterange"
+                        value-format="YYYY-MM-DD" range-separator="至"
+                        start-placeholder="开始日期" end-placeholder="结束日期"
+                        style="width: 250px;" @change="loadHistory" />
 
         <el-button :loading="loading" @click="refresh">刷新</el-button>
         <el-tag v-if="hasRunning" type="warning" size="small" effect="plain">运行中 · 自动刷新</el-tag>
@@ -95,7 +99,7 @@
 
     <!-- ② 全部 / 单个场景维度：运行记录 -->
     <div v-else class="table-wrap">
-      <el-table :data="filteredHistory" v-loading="loading" class="data-card" height="100%">
+      <el-table :data="pagedHistory" v-loading="loading" class="data-card" height="100%">
         <el-table-column label="开始时间" width="170">
           <template #default="{ row }">{{ formatDate(row.startedAt) }}</template>
         </el-table-column>
@@ -131,6 +135,14 @@
       </el-table>
     </div>
 
+    <!-- 分页（全部 / 单个场景维度）-->
+    <div v-if="dim !== 'plan' && filteredHistory.length > pageSize" class="pager-row">
+      <el-pagination background layout="total, sizes, prev, pager, next"
+                     :total="filteredHistory.length"
+                     v-model:current-page="currentPage" v-model:page-size="pageSize"
+                     :page-sizes="[20, 50, 100, 200]" />
+    </div>
+
     <!-- 日志弹窗 -->
     <el-dialog v-model="logDialogVisible" title="执行日志" width="820px" destroy-on-close>
       <div v-loading="logsLoading" class="log-box">
@@ -149,7 +161,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -168,6 +180,9 @@ const planRows = ref<any[]>([])
 const loading = ref(false)
 const filterScenarioId = ref<string>((route.query.scenarioId as string) || '')
 const filterStatus = ref<string>('')
+const dateRange = ref<[string, string] | null>(null)
+const currentPage = ref(1)
+const pageSize = ref(20)
 const selPlanId = ref<string>('')
 const logDialogVisible = ref(false)
 const runLogs = ref<any[]>([])
@@ -179,6 +194,12 @@ let refreshTimer: ReturnType<typeof setInterval> | null = null
 const filteredHistory = computed(() =>
   filterStatus.value ? history.value.filter(r => r.status === filterStatus.value) : history.value
 )
+const pagedHistory = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return filteredHistory.value.slice(start, start + pageSize.value)
+})
+// 筛选或数据变化时回到第一页
+watch([filterStatus, history], () => { currentPage.value = 1 })
 
 const hasRunning = computed(() =>
   dim.value === 'plan'
@@ -243,7 +264,11 @@ async function loadHistory() {
   loading.value = true
   try {
     const sid = dim.value === 'scenario' ? (filterScenarioId.value || undefined) : undefined
-    const res = await taskApi.history(sid)
+    const res = await taskApi.history({
+      scenarioId: sid,
+      from: dateRange.value?.[0] ? dateRange.value[0] + 'T00:00:00' : undefined,
+      to:   dateRange.value?.[1] ? dateRange.value[1] + 'T23:59:59' : undefined
+    })
     history.value = res.data
   } catch {
     ElMessage.error('加载历史失败')
@@ -320,6 +345,7 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
 
 <style scoped>
 .head-controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.pager-row { display: flex; justify-content: flex-end; padding: 12px 4px 0; flex-shrink: 0; }
 
 .data-card {
   background: var(--app-surface);

@@ -212,6 +212,9 @@ public class RunService : IRunService
                 errorMsg   = r.FailureReason;
             }
 
+            // 失败时把错误归类为可读中文（同时作为 summary 展示）
+            if (status == "failed") { errorMsg = Friendly(errorMsg); summary = errorMsg; }
+
             await db.Updateable<TestRun>()
                 .SetColumns(r => new TestRun
                 {
@@ -239,11 +242,12 @@ public class RunService : IRunService
         }
         catch (Exception ex)
         {
+            var friendly = Friendly(ex.Message);
             await db.Updateable<TestRun>()
-                .SetColumns(r => new TestRun { Status = "failed", FinishedAt = DateTime.UtcNow, ErrorMsg = ex.Message })
+                .SetColumns(r => new TestRun { Status = "failed", FinishedAt = DateTime.UtcNow, ErrorMsg = friendly })
                 .Where(r => r.Id == runId).ExecuteCommandAsync();
             await _hub.Clients.Group($"run_{runId}")
-                .SendAsync("RunFinished", new { runId, status = "failed", error = ex.Message });
+                .SendAsync("RunFinished", new { runId, status = "failed", summary = friendly, error = friendly });
         }
         finally
         {
@@ -328,6 +332,9 @@ public class RunService : IRunService
             errorMsg   = r.FailureReason;
         }
 
+        // 失败时把错误归类为可读中文（同时作为 summary 展示）
+        if (status == "failed") { errorMsg = Friendly(errorMsg); summary = errorMsg; }
+
         await db.Updateable<TestRun>()
             .SetColumns(t => new TestRun
             {
@@ -345,6 +352,38 @@ public class RunService : IRunService
             finishedAt = DateTime.UtcNow.ToString("o")
         });
     }
+
+    /// <summary>把原始异常/失败信息归类为可读中文；已含中文的业务消息原样返回。</summary>
+    private static string Friendly(string? raw)
+    {
+        var m = (raw ?? "").Trim();
+        if (m.Length == 0) return "执行失败（无详细信息）";
+        var low = m.ToLowerInvariant();
+
+        if (low.Contains("401") || low.Contains("unauthorized") || low.Contains("invalid api key") || low.Contains("authentication"))
+            return "AI 接口认证失败：API Key 无效或未配置，请到「设置」页检查。";
+        if (low.Contains("429") || low.Contains("rate limit") || low.Contains("too many requests"))
+            return "AI 接口限流或额度不足：请稍后重试。";
+        if (m.Contains("无法启动任何浏览器") || low.Contains("executable doesn't exist") || low.Contains("looks like playwright"))
+            return "浏览器启动失败：未找到可用浏览器，请安装 Playwright 内核或系统 Edge/Chrome。";
+        if (low.Contains("err_connection") || low.Contains("net::err") || low.Contains("err_name_not_resolved")
+            || (low.Contains("goto") && low.Contains("timeout")))
+            return "网页打开失败：起始 URL 无法访问，请确认目标网站/服务已启动且地址正确。";
+        if (low.Contains("timeout") && (low.Contains("locator") || low.Contains("waiting for") || low.Contains("selector")))
+            return "页面元素定位超时：目标元素未出现，可能页面结构已变或加载较慢。";
+        if (m.Contains("无法找到窗口") || m.Contains("找不到窗口"))
+            return m + "（请确认被测应用已打开，且窗口标题与场景配置一致）";
+        if (low.Contains("api 错误") || low.Contains("请求异常") || low.Contains("httprequest")
+            || low.Contains("timed out") || low.Contains("task was canceled") || low.Contains("no such host"))
+            return $"AI 调用失败：请检查网络或模型 BaseUrl 配置。（{Trunc(m, 120)}）";
+        if (low.Contains("npgsql") || low.Contains("connection refused") || low.Contains("password authentication"))
+            return $"数据库错误：请检查数据库连接配置。（{Trunc(m, 120)}）";
+        if (m.Any(c => c >= 0x4e00 && c <= 0x9fff))
+            return m;   // 已含中文，按业务消息原样返回
+        return $"执行异常：{Trunc(m, 160)}";
+    }
+
+    private static string Trunc(string s, int n) => s.Length <= n ? s : s[..n] + "…";
 
     private static string BuildSummary(PlayResult r)
     {

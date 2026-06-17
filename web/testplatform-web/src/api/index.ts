@@ -49,8 +49,8 @@ export const taskApi = {
   run: (scenarioId: string, inputParams: Record<string, string>, mode: string = 'auto') =>
     api.post('/tasks/run', { scenarioId, inputParams, mode }),
   cancel: (runId: string) => api.post(`/tasks/${runId}/cancel`),
-  history: (scenarioId?: string) =>
-    api.get('/tasks/history', { params: scenarioId ? { scenarioId } : {} }),
+  history: (params?: { scenarioId?: string; status?: string; from?: string; to?: string }) =>
+    api.get('/tasks/history', { params: params || {} }),
   logs: (runId: string) => api.get(`/tasks/${runId}/logs`),
   status: (runId: string) => api.get(`/tasks/${runId}/status`)
 }

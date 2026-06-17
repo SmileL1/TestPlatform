@@ -218,8 +218,8 @@
         <p v-if="parameters.length === 0" style="color: #999; text-align: center; padding: 16px;">暂无参数</p>
       </el-card>
 
-      <!-- 验证条件 -->
-      <el-card style="margin-bottom: 20px;">
+      <!-- 验证条件（WPF 结构化断言；Web 场景走 AI 截图验证，不显示此卡片）-->
+      <el-card v-if="form.type !== 'web'" style="margin-bottom: 20px;">
         <template #header>
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span>
